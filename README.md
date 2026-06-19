@@ -4,6 +4,16 @@ A personal Windows utility for extracting and archiving recordings from a **Tabl
 
 ---
 
+## Download
+
+→ **[Latest release — Releases page](https://github.com/Nootonian/TabloExtractinator4000/releases/latest)**
+
+Download `TabloExtractinator4000.exe` from the Assets section. You do not need to download the source code.
+
+> **Requires .NET 10 Desktop Runtime** — see [Requirements](#requirements) below.
+
+---
+
 ## Features
 
 - **Recordings browser** — grouped list of all episodes, movies, and sports on your Tablo, with right-click details and batch selection
