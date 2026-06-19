@@ -1,0 +1,73 @@
+<Window x:Class="TabloExtractinator4000.Views.GuideAiringDetailWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Program Info"
+        Width="440" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="#1E1E1E" Foreground="#D4D4D4"
+        FontFamily="Segoe UI" FontSize="13">
+
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#D4D4D4"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Background"  Value="#3C3C3C"/>
+            <Setter Property="Foreground"  Value="#D4D4D4"/>
+            <Setter Property="BorderBrush" Value="#555"/>
+            <Setter Property="Padding"     Value="16,6"/>
+            <Setter Property="Cursor"      Value="Hand"/>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="20">
+
+        <!-- Title -->
+        <TextBlock x:Name="ShowTitleText" FontSize="16" FontWeight="SemiBold"
+                   TextWrapping="Wrap" Margin="0,0,0,4"/>
+
+        <!-- Episode title -->
+        <TextBlock x:Name="EpisodeTitleText" FontSize="13" Foreground="#9CDCFE"
+                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+        <!-- Time -->
+        <TextBlock x:Name="TimeText" Foreground="#888888" FontSize="11" Margin="0,0,0,8"/>
+
+        <!-- Description -->
+        <TextBlock x:Name="DescriptionText" TextWrapping="Wrap" FontSize="12"
+                   Foreground="#CCCCCC" Margin="0,0,0,14"/>
+
+        <!-- Status badges -->
+        <Border x:Name="ScheduledBadge" Background="#1D4A2A" CornerRadius="4"
+                Padding="8,4" HorizontalAlignment="Left" Margin="0,0,0,14"
+                Visibility="Collapsed">
+            <TextBlock Text="✓ Already scheduled to record" Foreground="#4EC88A" FontSize="11" FontWeight="SemiBold"/>
+        </Border>
+
+        <Border x:Name="OnNowBadge" Background="#1A3A5C" CornerRadius="4"
+                Padding="8,4" HorizontalAlignment="Left" Margin="0,0,0,14"
+                Visibility="Collapsed">
+            <TextBlock Text="▶ On now" Foreground="#4FC3F7" FontSize="11" FontWeight="SemiBold"/>
+        </Border>
+
+        <!-- Buttons -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Close" Click="Close_Click" Margin="0,0,8,0"/>
+            <Button x:Name="WatchButton" Content="▶  Watch Live"
+                    Click="Watch_Click"
+                    Background="#1A3A5C" Foreground="#4FC3F7" BorderBrush="#2A5A8C"
+                    FontWeight="SemiBold" Margin="0,0,8,0"
+                    Visibility="Collapsed"/>
+            <Button x:Name="UnscheduleButton" Content="✕  Cancel This Recording"
+                    Click="Unschedule_Click"
+                    Background="#5A1A1A" Foreground="#EF9090" BorderBrush="#8B2020"
+                    FontWeight="SemiBold" Margin="0,0,8,0"
+                    Visibility="Collapsed"/>
+            <Button x:Name="ScheduleButton" Content="📅  Schedule Recording"
+                    Click="Schedule_Click"
+                    Background="#0078D4" Foreground="White" BorderBrush="#005A9E"
+                    FontWeight="SemiBold"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

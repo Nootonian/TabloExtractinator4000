@@ -1,0 +1,60 @@
+<Window x:Class="TabloExtractinator4000.Views.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="About Tablo Extractinator 4000"
+        Width="520" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="#1E1E1E">
+
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#D4D4D4"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Background"  Value="#3C3C3C"/>
+            <Setter Property="Foreground"  Value="#D4D4D4"/>
+            <Setter Property="BorderBrush" Value="#5A5A5A"/>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="24,20,24,20">
+
+        <!-- Title -->
+        <TextBlock Text="Tablo Extractinator 4000"
+                   FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,0,0,4"/>
+        <TextBlock x:Name="VersionText"
+                   FontSize="12" Foreground="#888888" Margin="0,0,0,16"/>
+
+        <!-- Description -->
+        <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,0,0,12">
+            A personal utility for extracting and archiving recordings from a Tablo 4th-generation
+            network DVR. Supports batch extraction, automatic filename templating, and a built-in
+            TV guide with recording scheduling.
+        </TextBlock>
+
+        <TextBlock Text="Created by:" FontSize="11" Foreground="#888888"/>
+        <TextBlock Text="Dayl Brinkman" FontSize="13" FontWeight="SemiBold" Foreground="#4FC3F7" Margin="0,2,0,16"/>
+
+        <!-- License / disclaimer -->
+        <Border Background="#252526" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,20">
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#AAAAAA" LineHeight="18">
+                <Run FontWeight="SemiBold" Foreground="#D4D4D4">License &amp; Disclaimer</Run><LineBreak/>
+                <LineBreak/>
+                This software is provided free of charge for personal, non-commercial use. You may use,
+                copy, and modify it for your own purposes. No warranty is provided, express or implied.
+                The author is not responsible for any data loss, device damage, or terms-of-service
+                violations that may result from use of this software.<LineBreak/>
+                <LineBreak/>
+                This tool accesses your Tablo device on your local network using the device's own API.
+                It does not circumvent copy protection or DRM. Use it only with recordings you are
+                legally entitled to access and archive.
+            </TextBlock>
+        </Border>
+
+        <Button Content="Close" IsDefault="True" IsCancel="True"
+                Padding="16,6" HorizontalAlignment="Right"
+                Click="Close_Click"/>
+
+    </StackPanel>
+</Window>

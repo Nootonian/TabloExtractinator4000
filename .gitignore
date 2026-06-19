@@ -1,0 +1,18 @@
+## .NET build output
+bin/
+obj/
+
+## Credentials - NEVER commit
+tablo.config.json
+
+## ffmpeg binaries - download separately (see README)
+TabloExtractinator4000/tools/ffmpeg.exe
+TabloExtractinator4000/tools/ffprobe.exe
+
+## Sample data
+sample-data/
+
+## Misc
+.vs/
+*.user
+.claude/

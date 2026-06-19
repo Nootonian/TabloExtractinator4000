@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="TabloAuthTest/TabloAuthTest.csproj" />
+  <Project Path="TabloExtractinator4000/TabloExtractinator4000.csproj" />
+</Solution>
