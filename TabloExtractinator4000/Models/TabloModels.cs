@@ -162,6 +162,7 @@ public enum ExportState
     Verifying,
     Verified,
     Failed,
+    Cancelled,
     DeletedFromTablo
 }
 
@@ -169,6 +170,18 @@ public class ExportJob
 {
     public IRecording  Recording  { get; }
     public string      OutputPath { get; }
+
+    // Per-job cancellation — lets the UI cancel/abort a single tile without
+    // touching the others in the same batch.
+    public CancellationTokenSource Cts { get; } = new();
+
+    // True once the job has been dequeued from the parallelism semaphore and
+    // started running (as opposed to still waiting in the "Pending" queue).
+    public bool HasStarted { get; set; }
+
+    // Per-job delete toggle — read live at the delete step, so the user can
+    // flip it at any point up until extraction finishes, even mid-download.
+    public bool DeleteAfterExtraction { get; set; }
 
     public ExportJob(IRecording recording, string outputPath)
     {

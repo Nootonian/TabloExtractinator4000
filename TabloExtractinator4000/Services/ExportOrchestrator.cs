@@ -1,16 +1,23 @@
+using System.Threading.Channels;
 using TabloExtractinator4000.Models;
 
 namespace TabloExtractinator4000.Services;
 
+// Long-lived extraction queue. Worker loops are started once and kept running
+// for the app's lifetime so new jobs can be enqueued at any time — including
+// while other jobs are mid-download — without disturbing what's already running.
 public class ExportOrchestrator
 {
     private readonly TabloApiService _api;
     private readonly FfmpegService   _ffmpeg;
     private readonly AuditLogService _audit;
 
-    // Session-scoped. NOT persisted. User must enable each launch.
-    public bool DeleteEnabled       { get; set; } = false;
-    public int  MaxParallelDownloads { get; set; } = 1;
+    private readonly Channel<ExportJob> _queue = Channel.CreateUnbounded<ExportJob>();
+    private readonly object             _lock  = new();
+    private IProgress<(ExportJob, string)>? _statusUpdate;
+    private int _workerCount;
+
+    public int MaxParallelDownloads { get; set; } = 1;
 
     public ExportOrchestrator(TabloApiService api, FfmpegService ffmpeg, AuditLogService audit)
     {
@@ -19,19 +26,45 @@ public class ExportOrchestrator
         _audit  = audit;
     }
 
-    public async Task RunAsync(
-        IReadOnlyList<ExportJob>    jobs,
-        IProgress<(ExportJob, string)>? statusUpdate,
-        CancellationToken           ct = default)
+    // Adds a job to the extraction queue. Spins up worker loops on first use,
+    // or scales up if MaxParallelDownloads has increased since the last call.
+    public void Enqueue(ExportJob job, IProgress<(ExportJob, string)> statusUpdate)
     {
-        var sem = new SemaphoreSlim(Math.Max(1, MaxParallelDownloads));
-        var tasks = jobs.Select(async job =>
+        lock (_lock)
         {
-            await sem.WaitAsync(ct);
-            try   { await RunSingleAsync(job, statusUpdate, ct); }
-            finally { sem.Release(); }
-        });
-        await Task.WhenAll(tasks);
+            _statusUpdate = statusUpdate;
+            var target = Math.Max(1, MaxParallelDownloads);
+            while (_workerCount < target)
+            {
+                _workerCount++;
+                _ = WorkerLoopAsync();
+            }
+        }
+        _queue.Writer.TryWrite(job);
+    }
+
+    private async Task WorkerLoopAsync()
+    {
+        try
+        {
+            await foreach (var job in _queue.Reader.ReadAllAsync())
+            {
+                if (job.Cts.IsCancellationRequested)
+                {
+                    job.State = ExportState.Cancelled;
+                    _statusUpdate?.Report((job, "Cancelled."));
+                    continue;
+                }
+                await RunSingleAsync(job, _statusUpdate, job.Cts.Token);
+            }
+        }
+        catch (Exception ex)
+        {
+            // RunSingleAsync swallows its own errors — this guards against anything
+            // unexpected so the slot can be replaced rather than silently lost.
+            Logger.Log($"ExportOrchestrator worker crashed: {ex}");
+            lock (_lock) { _workerCount--; }
+        }
     }
 
     private async Task RunSingleAsync(
@@ -40,6 +73,7 @@ public class ExportOrchestrator
         CancellationToken               ct)
     {
         var rec = job.Recording;
+        job.HasStarted = true;
 
         void Report(ExportState state, string msg)
         {
@@ -109,7 +143,8 @@ public class ExportOrchestrator
             Report(ExportState.Verified, $"Verified ({actualSec}s, {job.OutputBytes / 1_048_576:N0} MB)");
 
             // ---- Step 4: Delete from Tablo (triple-gated) ----
-            if (!DeleteEnabled) return;
+            // Read live — the user can toggle this per-job up until this point.
+            if (!job.DeleteAfterExtraction) return;
 
             if (!job.FfmpegSuccess || !job.ProbeVerified)
             {
@@ -132,8 +167,7 @@ public class ExportOrchestrator
         }
         catch (OperationCanceledException)
         {
-            Report(ExportState.Failed, "Cancelled.");
-            throw;
+            Report(ExportState.Cancelled, "Cancelled.");
         }
         catch (Exception ex)
         {
