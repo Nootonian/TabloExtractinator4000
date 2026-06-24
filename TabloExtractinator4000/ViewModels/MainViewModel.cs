@@ -54,6 +54,12 @@ public partial class MainViewModel : ObservableObject
     // Keyed lookup so the progress callback can find the tile for any job,
     // regardless of which Extract/AddToExtraction call enqueued it.
     private readonly Dictionary<ExportJob, ExportProgressViewModel> _progressVms = [];
+
+    // Tracks the current job (if any) queued/running for a given recording, so
+    // checking/unchecking a row's checkbox can create or remove its Queued tile
+    // without creating duplicates.
+    private readonly Dictionary<IRecording, ExportJob> _jobByRecording = [];
+
     private IProgress<(ExportJob, string)>? _exportProgress;
     private IProgress<(ExportJob, string)> ExportProgress =>
         _exportProgress ??= new Progress<(ExportJob, string)>(OnExportProgress);
@@ -74,9 +80,9 @@ public partial class MainViewModel : ObservableObject
 
     public bool CanConnect        => !IsBusy;           // allow re-connect to switch accounts
     public bool CanLoadRecordings => !IsBusy && IsConnected;
-    // Exporting no longer blocks on IsBusy — the queue accepts new jobs at any time,
-    // including while other recordings are mid-extraction.
-    public bool CanExport         => IsConnected && Recordings.Any(r => r.IsSelected);
+    // "Extract Selected" now starts whatever's currently Queued, rather than
+    // building jobs from the checkboxes itself — checking a box already did that.
+    public bool CanExport         => ExportJobs.Any(vm => vm.Job.State == ExportState.Queued);
 
     public int SelectedCount => Recordings.Count(r => r.IsSelected);
 
@@ -184,9 +190,12 @@ public partial class MainViewModel : ObservableObject
     private async Task LoadRecordingsAsync(CancellationToken ct)
     {
         IsBusy = true;
+        foreach (var row in Recordings) row.SelectionChanged -= OnRowSelectionChanged;
         Recordings.Clear();
-        foreach (var vm in ExportJobs) _progressVms.Remove(vm.Job);
+        foreach (var vm in ExportJobs) vm.RemoveRequested -= OnTileRemoveRequested;
         ExportJobs.Clear();
+        _progressVms.Clear();
+        _jobByRecording.Clear();
         StatusMessage = "Loading recordings…";
         try
         {
@@ -201,7 +210,11 @@ public partial class MainViewModel : ObservableObject
                 .ThenBy(r => r.AiredAt);
 
             foreach (var rec in sorted)
-                Recordings.Add(new RecordingRowViewModel(rec));
+            {
+                var row = new RecordingRowViewModel(rec);
+                row.SelectionChanged += OnRowSelectionChanged;
+                Recordings.Add(row);
+            }
 
             var loadMsg = $"Loaded {Recordings.Count} recordings.";
             if (_api.ParseErrors.Count > 0)
@@ -281,22 +294,72 @@ public partial class MainViewModel : ObservableObject
         ExportSelectedCommand.NotifyCanExecuteChanged();
     }
 
+    // Fires for every IsSelected change on any row — checking the box creates a
+    // Queued tile immediately; unchecking removes it, unless it's already been
+    // submitted/is actively extracting (only Abort/Cancel can remove those).
+    private void OnRowSelectionChanged(RecordingRowViewModel row, bool isChecked)
+    {
+        OnPropertyChanged(nameof(SelectedCount));
+        ExportSelectedCommand.NotifyCanExecuteChanged();
+
+        if (isChecked) AddToQueue(row);
+        else            RemoveFromQueueIfStillQueued(row);
+    }
+
+    // True from the moment the user clicks Start Extraction until the queue is
+    // fully drained — while true, any tile queued mid-run gets picked up
+    // automatically once the current batch finishes, with no extra click needed.
+    private bool _autoExtracting;
+
+    // Starts extraction for whatever's currently sitting in the Queued state —
+    // checking a box (or right-clicking "Add to Extraction Queue") already built
+    // the tile; this is the point where it actually begins downloading.
     [RelayCommand(CanExecute = nameof(CanExport))]
     private void ExportSelected()
     {
-        var selected = Recordings.Where(r => r.IsSelected).ToList();
-        if (selected.Count == 0) return;
-        QueueForExtraction(selected);
+        _autoExtracting = true;
+        SubmitQueuedJobs();
     }
 
-    // Right-click "Add to extraction queue" on a single recording — same queue
-    // as Extract Selected, so it slots in alongside whatever's already running.
+    private void SubmitQueuedJobs()
+    {
+        var queued = ExportJobs.Where(vm => vm.Job.State == ExportState.Queued)
+                                .Select(vm => vm.Job).ToList();
+        if (queued.Count == 0) { RecomputeIsBusy(); return; }
+
+        var toDelete = queued.Where(j => j.DeleteAfterExtraction).ToList();
+        if (toDelete.Count > 0 && !ShowDeleteConfirmation(toDelete))
+        {
+            // Declined — don't keep retrying automatically; the user must
+            // explicitly click Start Extraction again to re-confirm.
+            _autoExtracting = false;
+            StatusMessage = $"{queued.Count} queued — click Start Extraction to begin.";
+            return;
+        }
+
+        foreach (var job in queued)
+        {
+            job.State = ExportState.Pending;
+            if (_progressVms.TryGetValue(job, out var vm))
+            {
+                vm.State  = "Pending";
+                vm.Status = "Waiting for a free slot…";
+            }
+            _orchestrator.Enqueue(job, ExportProgress);
+        }
+
+        RecomputeIsBusy();
+    }
+
+    // Right-click "Add to Extraction Queue" — same Queued tile a checkbox creates,
+    // plus syncs the row's checkbox so it visually reflects the queued tile.
     [RelayCommand]
     private void AddToExtraction(RecordingRowViewModel? row)
     {
         if (row == null) return;
-        QueueForExtraction([row]);
-        StatusMessage = $"Added to queue: {row.Recording.DisplayTitle}";
+        if (AddToQueue(row))
+            StatusMessage = $"Queued for extraction: {row.Recording.DisplayTitle}";
+        row.IsSelected = true;
     }
 
     [RelayCommand]
@@ -305,40 +368,59 @@ public partial class MainViewModel : ObservableObject
         foreach (var vm in ExportJobs) vm.Job.Cts.Cancel();
     }
 
-    private void QueueForExtraction(List<RecordingRowViewModel> rows)
+    // Returns true if a new Queued tile was created; false if one already
+    // existed (Queued or actively running) for this recording.
+    private bool AddToQueue(RecordingRowViewModel row)
     {
+        if (_jobByRecording.TryGetValue(row.Recording, out var existing) &&
+            existing.State is ExportState.Queued or ExportState.Pending or ExportState.Discovering
+                            or ExportState.Downloading or ExportState.Verifying)
+            return false;
+
         _filenames.EpisodeTemplate = EpisodeTemplate;
         _filenames.MovieTemplate   = MovieTemplate;
 
-        var jobs = rows.Select(row =>
-        {
-            var filename   = _filenames.GenerateFilename(row.Recording);
-            var baseFolder = row.Recording is MovieRecording ? MovieOutputFolder : OutputFolder;
-            var outPath    = System.IO.Path.Combine(baseFolder, filename);
-            return new ExportJob(row.Recording, outPath) { DeleteAfterExtraction = DeleteEnabled };
-        }).ToList();
+        var filename   = _filenames.GenerateFilename(row.Recording);
+        var baseFolder = row.Recording is MovieRecording ? MovieOutputFolder : OutputFolder;
+        var outPath    = System.IO.Path.Combine(baseFolder, filename);
+        var job = new ExportJob(row.Recording, outPath) { DeleteAfterExtraction = DeleteEnabled };
 
-        var toDelete = jobs.Where(j => j.DeleteAfterExtraction).ToList();
-        if (toDelete.Count > 0 && !ShowDeleteConfirmation(toDelete)) return;
-
-        // Starting fresh while the queue is idle clears old finished tiles. While
-        // jobs are already running, new ones are appended alongside them instead.
-        if (!IsBusy)
-        {
-            foreach (var vm in ExportJobs) _progressVms.Remove(vm.Job);
-            ExportJobs.Clear();
-        }
-
-        foreach (var job in jobs)
-        {
-            var vm = new ExportProgressViewModel(job);
-            _progressVms[job] = vm;
-            ExportJobs.Add(vm);
-            _orchestrator.Enqueue(job, ExportProgress);
-        }
+        var vm = new ExportProgressViewModel(job);
+        vm.RemoveRequested += OnTileRemoveRequested;
+        _progressVms[job] = vm;
+        _jobByRecording[row.Recording] = job;
+        ExportJobs.Add(vm);
 
         RecomputeIsBusy();
+        ExportSelectedCommand.NotifyCanExecuteChanged();
+        return true;
     }
+
+    // Only pulls the tile out while it's still Queued (never submitted). Once
+    // it's Pending or actively running, unchecking the box is a no-op for the
+    // tile — Abort/Cancel on the tile itself is the only way to remove it.
+    private void RemoveFromQueueIfStillQueued(RecordingRowViewModel row)
+    {
+        if (!_jobByRecording.TryGetValue(row.Recording, out var job)) return;
+        if (job.State != ExportState.Queued) return;
+        if (_progressVms.TryGetValue(job, out var vm)) RemoveTile(vm);
+    }
+
+    // Common teardown for any tile leaving the list, regardless of why.
+    private void RemoveTile(ExportProgressViewModel vm)
+    {
+        vm.RemoveRequested -= OnTileRemoveRequested;
+        ExportJobs.Remove(vm);
+        _progressVms.Remove(vm.Job);
+        if (_jobByRecording.TryGetValue(vm.Job.Recording, out var current) && current == vm.Job)
+            _jobByRecording.Remove(vm.Job.Recording);
+        RecomputeIsBusy();
+        ExportSelectedCommand.NotifyCanExecuteChanged();
+    }
+
+    // A tile with nothing left to cancel (Queued or terminal) — the user clicked
+    // its button just to dismiss it from the list.
+    private void OnTileRemoveRequested(ExportProgressViewModel vm) => RemoveTile(vm);
 
     private void OnExportProgress((ExportJob job, string msg) update)
     {
@@ -349,9 +431,7 @@ public partial class MainViewModel : ObservableObject
         // outright rather than left showing a "Cancelled" state.
         if (job.State == ExportState.Cancelled && !job.HasStarted)
         {
-            ExportJobs.Remove(vm);
-            _progressVms.Remove(job);
-            RecomputeIsBusy();
+            RemoveTile(vm);
             return;
         }
 
@@ -396,6 +476,7 @@ public partial class MainViewModel : ObservableObject
             var deletedRow = Recordings.FirstOrDefault(r => r.Recording == job.Recording);
             if (deletedRow != null)
             {
+                deletedRow.SelectionChanged -= OnRowSelectionChanged;
                 Recordings.Remove(deletedRow);
                 OnPropertyChanged(nameof(SelectedCount));
                 ExportSelectedCommand.NotifyCanExecuteChanged();
@@ -409,12 +490,27 @@ public partial class MainViewModel : ObservableObject
     {
         IsBusy = ExportJobs.Any(vm => vm.Job.State is ExportState.Pending or ExportState.Discovering
                                                     or ExportState.Downloading or ExportState.Verifying);
-        if (!IsBusy)
-            StatusMessage = ExportJobs.Any(vm => vm.Job.State == ExportState.Failed)
-                ? "Extraction complete — some failed, see tiles."
-                : ExportJobs.Count > 0 ? "Extraction complete." : "Ready";
-        else
-            StatusMessage = "Extracting…";
+        if (IsBusy) { StatusMessage = "Extracting…"; return; }
+
+        // Nothing currently active — if the user started extraction and more got
+        // queued while it was working, pick it up now rather than waiting for
+        // another click.
+        if (_autoExtracting)
+        {
+            if (ExportJobs.Any(vm => vm.Job.State == ExportState.Queued)) { SubmitQueuedJobs(); return; }
+            _autoExtracting = false;
+        }
+
+        var queuedCount = ExportJobs.Count(vm => vm.Job.State == ExportState.Queued);
+        if (queuedCount > 0)
+        {
+            StatusMessage = $"{queuedCount} queued — click Start Extraction to begin.";
+            return;
+        }
+
+        StatusMessage = ExportJobs.Any(vm => vm.Job.State == ExportState.Failed)
+            ? "Extraction complete — some failed, see tiles."
+            : ExportJobs.Count > 0 ? "Extraction complete." : "Ready";
     }
 
     [RelayCommand]
@@ -590,6 +686,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             await _api.DeleteRecordingAsync(row.Recording, CancellationToken.None);
+            row.SelectionChanged -= OnRowSelectionChanged;
             Recordings.Remove(row);
             OnPropertyChanged(nameof(SelectedCount));
             ExportSelectedCommand.NotifyCanExecuteChanged();

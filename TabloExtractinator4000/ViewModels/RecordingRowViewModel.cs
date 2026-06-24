@@ -9,6 +9,13 @@ public partial class RecordingRowViewModel : ObservableObject
 
     [ObservableProperty] private bool _isSelected;
 
+    // Raised on every IsSelected change, regardless of source (user click, Select
+    // All, group checkbox). Property-level rather than a routed UI event so it
+    // still fires for rows that aren't currently realized by DataGrid virtualization.
+    public event Action<RecordingRowViewModel, bool>? SelectionChanged;
+
+    partial void OnIsSelectedChanged(bool value) => SelectionChanged?.Invoke(this, value);
+
     public RecordingRowViewModel(IRecording recording)
     {
         Recording = recording;

@@ -80,11 +80,15 @@ public class FilenameService
     // Remove characters that are illegal in Windows filenames
     private static string Sanitize(string name)
     {
+        // Colon is the most common "invalid" character in real titles (e.g. "9-1-1: Nashville") —
+        // give it a readable separator instead of an underscore.
+        name = name.Replace(":", " -");
+
         var invalid = System.IO.Path.GetInvalidFileNameChars();
         var sb = new System.Text.StringBuilder();
         foreach (var c in name)
-            sb.Append(invalid.Contains(c) ? '_' : c);
-        // Collapse multiple spaces/underscores
-        return System.Text.RegularExpressions.Regex.Replace(sb.ToString().Trim(), @"\s{2,}", " ");
+            if (!invalid.Contains(c)) sb.Append(c);  // drop illegal chars rather than substituting
+
+        return System.Text.RegularExpressions.Regex.Replace(sb.ToString(), @"\s{2,}", " ").Trim();
     }
 }

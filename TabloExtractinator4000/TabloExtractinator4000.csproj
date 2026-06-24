@@ -9,9 +9,9 @@
     <UseWPF>true</UseWPF>
     <!-- FolderBrowserDialog lives here -->
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>2.93.0</Version>
-    <AssemblyVersion>2.93.0.0</AssemblyVersion>
-    <FileVersion>2.93.0.0</FileVersion>
+    <Version>2.96.0</Version>
+    <AssemblyVersion>2.96.0.0</AssemblyVersion>
+    <FileVersion>2.96.0.0</FileVersion>
     <Product>Tablo Extractinator 4000</Product>
     <Company>Tablo Extractinator</Company>
     <Description>Extract recordings from Tablo DVR over the local network.</Description>

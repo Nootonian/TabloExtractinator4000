@@ -924,7 +924,7 @@
                 <!-- Export actions -->
                 <Border DockPanel.Dock="Top" Style="{StaticResource SectionBorder}">
                     <StackPanel>
-                        <Button Content="Extract Selected"
+                        <Button Content="▶  Start Extraction"
                                 Command="{Binding ExportSelectedCommand}"
                                 Background="#0078D4" Foreground="White"
                                 BorderBrush="#005A9E"
@@ -942,7 +942,6 @@
                 <!-- Export progress -->
                 <Border Style="{StaticResource SectionBorder}">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="Extraction Progress" Style="{StaticResource HeaderText}"/>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding ExportJobs}">
                                 <ItemsControl.ItemTemplate>
@@ -953,7 +952,6 @@
                                                     <Button DockPanel.Dock="Right"
                                                             Content="{Binding CancelButtonLabel}"
                                                             Command="{Binding CancelCommand}"
-                                                            Visibility="{Binding CanCancel, Converter={StaticResource BoolToVis}}"
                                                             Padding="6,1" FontSize="9" Margin="4,0,0,0"
                                                             Background="#3C3C3C" Foreground="#EF9090" BorderBrush="#5A5A5A"/>
                                                     <CheckBox DockPanel.Dock="Left"

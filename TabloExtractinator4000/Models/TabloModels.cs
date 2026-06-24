@@ -156,7 +156,8 @@ public record DeviceInfo(
 // ---------------------------------------------------------------------------
 public enum ExportState
 {
-    Pending,
+    Queued,         // tile created, not yet submitted to the extraction queue
+    Pending,        // submitted, waiting for a free worker slot
     Discovering,    // fetching stream/playlist URL
     Downloading,
     Verifying,
@@ -189,7 +190,7 @@ public class ExportJob
         OutputPath = outputPath;
     }
 
-    public ExportState State               { get; set; } = ExportState.Pending;
+    public ExportState State               { get; set; } = ExportState.Queued;
     public double      ProgressPct         { get; set; }
     public string?     ErrorMessage        { get; set; }
     public bool        FfmpegSuccess       { get; set; }
