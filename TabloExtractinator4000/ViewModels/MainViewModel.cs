@@ -559,9 +559,8 @@ public partial class MainViewModel : ObservableObject
     {
         var dialog = new System.Windows.Forms.OpenFileDialog
         {
-            Title  = "Find VLC executable",
-            Filter = "vlc.exe|vlc.exe|All executables|*.exe",
-            FileName = "vlc.exe",
+            Title  = "Find media player executable",
+            Filter = "Executables|*.exe|All files|*.*",
         };
         if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             VlcPath = dialog.FileName;
