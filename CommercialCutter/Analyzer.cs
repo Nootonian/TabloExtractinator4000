@@ -599,6 +599,14 @@ public static class Analyzer
         // so the genuine break gets thrown out by the very check meant to protect it. Merging
         // anything within mergeToleranceSeconds into one combined dip before pairing fixes that
         // without weakening the isolation check itself, which still runs on the merged list.
+        //
+        // This tolerance is deliberately much tighter than FindChainedDip's
+        // ChainGapToleranceSeconds: merging at that wider scale collapses an entire busy cluster
+        // (e.g. cold-open flickers plus the whole title sequence) down to one anchor whose
+        // *other* side then looks spuriously isolated, reintroducing exactly the phantom-bridge
+        // problem this function exists to avoid. A break landing right at the tail of a long
+        // decoy cluster (e.g. immediately after the titles) is a known remaining gap here — the
+        // logo path with a reasonably low manual dip still catches those.
         const double mergeToleranceSeconds = 5.0;
         var sorted = MergeCloseIntervals(blackIntervals, mergeToleranceSeconds);
         var candidates = new List<(double Start, double End)>();
