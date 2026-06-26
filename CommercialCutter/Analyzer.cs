@@ -23,6 +23,16 @@ public static class Analyzer
     // as its "no expected length, no manual dip" default, not just FindAdaptiveThresholdForTarget.
     public const double SafeDefaultDip = 0.05;
 
+    // The local-baseline window radius used everywhere this matters. Used to be user-editable
+    // (the rationale: a window narrower than your longest ad break lets that break drag its own
+    // baseline down, hiding itself) — but black-bridge detection now catches long breaks
+    // independently of the baseline entirely, so that concern is moot, and widening the window
+    // past this has a real downside: it changes the baseline enough that a *short* break's raw
+    // dip can stop crossing the detection floor on its own (confirmed in practice — a 400s radius
+    // missed a 45s break that 300s caught, with bridging needed to cover the gap either way).
+    // There's no longer a good reason to deviate from this value.
+    public const double LocalWindowSeconds = 300.0;
+
     // Scores every thumbnail's similarity to the reference logo crop. Classification
     // (what threshold counts as "logo present") happens separately in BuildSegments,
     // so the same scores can be re-classified at different thresholds without re-reading images.

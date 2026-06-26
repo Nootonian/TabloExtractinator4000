@@ -252,8 +252,6 @@
             <DockPanel x:Name="AdaptiveModePanel" Margin="0,0,0,8" LastChildFill="False">
                 <TextBlock DockPanel.Dock="Left" Text="Max dip from local baseline (optional — leave blank for the default):" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <TextBox x:Name="AdaptiveDipBox" DockPanel.Dock="Left" Width="60" Text="" VerticalContentAlignment="Center" Margin="0,0,16,0" />
-                <TextBlock DockPanel.Dock="Left" Text="Local window radius (s):" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox x:Name="LocalWindowSecondsBox" DockPanel.Dock="Left" Width="60" Text="300" VerticalContentAlignment="Center" />
             </DockPanel>
             <DockPanel x:Name="AbsoluteModePanel" Margin="0,0,0,8" LastChildFill="False" Visibility="Collapsed">
                 <TextBlock DockPanel.Dock="Left" Text="Manual threshold (optional):" VerticalAlignment="Center" Margin="0,0,8,0" />

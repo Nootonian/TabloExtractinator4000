@@ -68,7 +68,6 @@ public partial class MainWindow : Window
         RefineTransitionsCheckBox.IsChecked = s.RefineTransitions;
         MaxNudgeSecondsBox.Text   = s.MaxNudgeSeconds.ToString(CultureInfo.InvariantCulture);
         HybridToleranceBox.Text   = s.HybridToleranceSeconds.ToString(CultureInfo.InvariantCulture);
-        LocalWindowSecondsBox.Text = s.LocalWindowSeconds.ToString(CultureInfo.InvariantCulture);
         if (s.ExpectedLengthMinutes is { } expectedLength) ExpectedLengthBox.Text = expectedLength.ToString(CultureInfo.InvariantCulture);
         if (s.ManualThreshold is { } manualThresholdSetting) ThresholdBox.Text = manualThresholdSetting.ToString(CultureInfo.InvariantCulture);
         if (s.ManualDip is { } manualDipSetting) AdaptiveDipBox.Text = manualDipSetting.ToString(CultureInfo.InvariantCulture);
@@ -93,7 +92,6 @@ public partial class MainWindow : Window
         double.TryParse(MinBreakSecondsBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var minBreak);
         double.TryParse(MaxNudgeSecondsBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var maxNudge);
         double.TryParse(HybridToleranceBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var hybridTol);
-        double.TryParse(LocalWindowSecondsBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var localWindow);
 
         _settings.IntervalSeconds       = interval > 0 ? interval : _settings.IntervalSeconds;
         _settings.AdUnitSeconds         = adUnit > 0 ? adUnit : _settings.AdUnitSeconds;
@@ -101,7 +99,6 @@ public partial class MainWindow : Window
         _settings.RefineTransitions     = RefineTransitionsCheckBox.IsChecked == true;
         _settings.MaxNudgeSeconds       = maxNudge >= 0 ? maxNudge : _settings.MaxNudgeSeconds;
         _settings.HybridToleranceSeconds = hybridTol >= 0 ? hybridTol : _settings.HybridToleranceSeconds;
-        _settings.LocalWindowSeconds    = localWindow > 0 ? localWindow : _settings.LocalWindowSeconds;
         _settings.CutMode = FastCutRadio.IsChecked == true ? "Fast" : HybridCutRadio.IsChecked == true ? "Hybrid" : "Exact";
         _settings.DetectionMode = AbsoluteModeRadio.IsChecked == true ? "Absolute" : "Adaptive";
 
@@ -404,13 +401,6 @@ public partial class MainWindow : Window
                 return;
             }
         }
-        var localWindowSeconds = 300.0;
-        if (isAdaptive &&
-            (!double.TryParse(LocalWindowSecondsBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out localWindowSeconds) || localWindowSeconds <= 0))
-        {
-            Log("Enter a valid local window radius.");
-            return;
-        }
         if (!double.TryParse(AdUnitSecondsBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var adUnitSeconds) || adUnitSeconds <= 0)
         {
             Log("Enter a valid ad unit length.");
@@ -469,10 +459,10 @@ public partial class MainWindow : Window
                     if (isAdaptive)
                     {
                         var (found, drop) = Analyzer.FindAdaptiveThresholdForTarget(
-                            scores, interval, expectedMinutes * 60.0, localWindowSeconds, adUnitSeconds, minBreakSeconds, black, silence, maxNudgeSeconds);
+                            scores, interval, expectedMinutes * 60.0, Analyzer.LocalWindowSeconds, adUnitSeconds, minBreakSeconds, black, silence, maxNudgeSeconds);
                         segments = found;
                         usedThresholdLabel = $"local baseline − {drop:F3}";
-                        var baseline = Analyzer.ComputeLocalBaseline(scores, interval, localWindowSeconds);
+                        var baseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
                         thresholdCurve = baseline.Select(b => b - drop).ToArray();
                         Log($"Settled on max dip {drop:F3} from local baseline.");
                     }
@@ -488,9 +478,9 @@ public partial class MainWindow : Window
                 }
                 else if (isAdaptive)
                 {
-                    segments = Analyzer.BuildSegmentsAdaptive(scores, interval, manualDip, localWindowSeconds, adUnitSeconds, minBreakSeconds);
+                    segments = Analyzer.BuildSegmentsAdaptive(scores, interval, manualDip, Analyzer.LocalWindowSeconds, adUnitSeconds, minBreakSeconds);
                     usedThresholdLabel = $"local baseline − {manualDip:F3}";
-                    var baseline = Analyzer.ComputeLocalBaseline(scores, interval, localWindowSeconds);
+                    var baseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
                     thresholdCurve = baseline.Select(b => b - manualDip).ToArray();
 
                     if (refineTransitions && black is not null && silence is not null)
@@ -526,7 +516,7 @@ public partial class MainWindow : Window
                     // folds them in wherever the logo path called it program. The similarity
                     // scores/baseline guard against trusting black timing alone — see
                     // FindBlackBridgedBreaks for why that matters.
-                    var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, localWindowSeconds);
+                    var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
                     var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
                     var beforeBridgeCount = segments.Count(s => s.IsCommercial);
                     segments = Analyzer.MergeBlackBridgedBreaks(segments, bridged);
@@ -891,13 +881,6 @@ public partial class MainWindow : Window
                 return;
             }
         }
-        var localWindowSeconds = 300.0;
-        if (isAdaptive &&
-            (!double.TryParse(LocalWindowSecondsBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out localWindowSeconds) || localWindowSeconds <= 0))
-        {
-            Log("Enter a valid local window radius (step 3).");
-            return;
-        }
         if (!double.TryParse(AdUnitSecondsBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var adUnitSeconds) || adUnitSeconds <= 0)
         {
             Log("Enter a valid ad unit length (step 3).");
@@ -972,13 +955,13 @@ public partial class MainWindow : Window
                         if (hasExpectedLength)
                         {
                             segments = isAdaptive
-                                ? Analyzer.FindAdaptiveThresholdForTarget(scores, interval, expectedMinutes * 60.0, localWindowSeconds, adUnitSeconds, minBreakSeconds, black, silence, maxNudgeSeconds).Segments
+                                ? Analyzer.FindAdaptiveThresholdForTarget(scores, interval, expectedMinutes * 60.0, Analyzer.LocalWindowSeconds, adUnitSeconds, minBreakSeconds, black, silence, maxNudgeSeconds).Segments
                                 : Analyzer.FindThresholdForTarget(scores, interval, expectedMinutes * 60.0, adUnitSeconds, minBreakSeconds, black, silence, maxNudgeSeconds).Segments;
                         }
                         else
                         {
                             segments = isAdaptive
-                                ? Analyzer.BuildSegmentsAdaptive(scores, interval, manualDip, localWindowSeconds, adUnitSeconds, minBreakSeconds)
+                                ? Analyzer.BuildSegmentsAdaptive(scores, interval, manualDip, Analyzer.LocalWindowSeconds, adUnitSeconds, minBreakSeconds)
                                 : Analyzer.BuildSegments(scores, interval, manualThreshold, adUnitSeconds, minBreakSeconds);
                         }
 
@@ -990,7 +973,7 @@ public partial class MainWindow : Window
 
                         if (refineTransitions && black is not null)
                         {
-                            var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, localWindowSeconds);
+                            var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
                             var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
                             segments = Analyzer.MergeBlackBridgedBreaks(segments, bridged);
                         }

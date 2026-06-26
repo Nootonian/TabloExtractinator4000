@@ -13,7 +13,6 @@ public class AppSettings
     public string CutMode { get; set; } = "Exact"; // "Fast", "Hybrid", or "Exact"
     public double HybridToleranceSeconds { get; set; } = 3.0;
     public string DetectionMode { get; set; } = "Adaptive"; // "Adaptive" or "Absolute"
-    public double LocalWindowSeconds { get; set; } = 300.0;
     public double? ExpectedLengthMinutes { get; set; }
     public double? ManualThreshold { get; set; }
     public double? ManualDip { get; set; }
