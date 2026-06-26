@@ -4,11 +4,14 @@ namespace CommercialCutter;
 public record CropRect(int X, int Y, int Width, int Height);
 
 // Output of `selectbox`: where the logo lives and what it looks like when present.
+// SampleAtSeconds remembers which timestamp the box was drawn at, so reopening the same video
+// later shows that same point instead of recomputing a fresh 25%-of-duration guess.
 public record CutterConfig(
     CropRect Crop,
     string   ReferenceImagePath,
     int      FrameWidth,
-    int      FrameHeight);
+    int      FrameHeight,
+    double?  SampleAtSeconds = null);
 
 // One sample taken during `catalog`/scored during `analyze`. Classification against a
 // threshold happens later (see Analyzer.BuildSegments), so this just carries the raw score.

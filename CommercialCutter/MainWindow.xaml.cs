@@ -209,7 +209,16 @@ public partial class MainWindow : Window
             _durationSeconds = await Ffmpeg.GetDurationSecondsAsync(_videoPath);
             VideoInfoText.Text = $"Duration: {TimeSpan.FromSeconds(_durationSeconds):hh\\:mm\\:ss}   " +
                                  $"Working folder: {_workDir}";
-            SampleAtBox.Text = ((int)(_durationSeconds * 0.25)).ToString(CultureInfo.InvariantCulture);
+
+            // Reopening a video that already has a saved box: show the timestamp it was drawn
+            // at last time, not a fresh 25%-of-duration guess.
+            double? savedSampleAt = null;
+            if (File.Exists(_configPath))
+            {
+                try { savedSampleAt = ConfigStore.LoadConfig(_configPath).SampleAtSeconds; }
+                catch { /* ignore unreadable/older config — fall back to the default below */ }
+            }
+            SampleAtBox.Text = (savedSampleAt ?? _durationSeconds * 0.25).ToString("F0", CultureInfo.InvariantCulture);
             SelectBoxButton.IsEnabled = true;
             Log($"Loaded {Path.GetFileName(_videoPath)} ({_durationSeconds:F0}s).");
 
@@ -254,8 +263,8 @@ public partial class MainWindow : Window
             var referencePath = Path.Combine(_workDir!, "reference_logo.jpg");
             await Cataloger.CatalogReferenceCropAsync(_videoPath, sampleAt, crop, referencePath);
 
-            var (w, h) = await GetFrameSizeAsync(_videoPath);
-            ConfigStore.SaveConfig(_configPath, new CutterConfig(crop, referencePath, w, h));
+            var (w, h) = await Ffmpeg.GetFrameSizeAsync(_videoPath);
+            ConfigStore.SaveConfig(_configPath, new CutterConfig(crop, referencePath, w, h, sampleAt));
 
             BoxInfoText.Text = $"Box saved: x={crop.X} y={crop.Y} w={crop.Width} h={crop.Height}";
             Log("Logo box saved.");
@@ -269,21 +278,6 @@ public partial class MainWindow : Window
         {
             SelectBoxButton.IsEnabled = true;
         }
-    }
-
-    private static async Task<(int Width, int Height)> GetFrameSizeAsync(string video)
-    {
-        var (code, stdout, stderr) = await Ffmpeg.RunFfprobeAsync(new[]
-        {
-            "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=width,height",
-            "-of", "csv=p=0",
-            video,
-        });
-        if (code != 0) throw new InvalidOperationException($"ffprobe failed: {stderr}");
-        var parts = stdout.Trim().Split(',');
-        return (int.Parse(parts[0], CultureInfo.InvariantCulture), int.Parse(parts[1], CultureInfo.InvariantCulture));
     }
 
     // Plots the raw similarity-to-reference curve, the effective cutoff (constant for absolute

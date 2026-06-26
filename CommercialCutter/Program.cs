@@ -123,7 +123,7 @@ public static class Program
         await Cataloger.CatalogReferenceCropAsync(video, sampleAt, crop, referencePath);
 
         var (w, h) = await Ffmpeg.GetFrameSizeAsync(video);
-        var config = new CutterConfig(crop, referencePath, w, h);
+        var config = new CutterConfig(crop, referencePath, w, h, sampleAt);
         ConfigStore.SaveConfig(configPath, config);
 
         Console.WriteLine($"Saved config to {configPath}");
