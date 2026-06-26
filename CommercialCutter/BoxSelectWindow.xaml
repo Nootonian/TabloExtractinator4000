@@ -1,0 +1,42 @@
+<Window x:Class="CommercialCutter.BoxSelectWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Draw a box around the station logo, then click Confirm"
+        Width="1024" Height="740" WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="ImageHost" Grid.Row="0" Background="Black"
+              MouseLeftButtonDown="ImageHost_MouseLeftButtonDown"
+              MouseMove="ImageHost_MouseMove"
+              MouseLeftButtonUp="ImageHost_MouseLeftButtonUp">
+            <Image x:Name="FrameImage" Stretch="Uniform" />
+            <Canvas x:Name="Overlay" Background="Transparent">
+                <Rectangle x:Name="SelectionRect" Stroke="Lime" StrokeThickness="2" Visibility="Collapsed" />
+            </Canvas>
+        </Grid>
+
+        <StackPanel x:Name="SeekPanel" Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="8">
+            <Button Content="-30s" Width="50" Margin="0,0,4,0" Click="Seek_Click" Tag="-30" />
+            <Button Content="-10s" Width="50" Margin="0,0,4,0" Click="Seek_Click" Tag="-10" />
+            <Button Content="-1s" Width="50" Margin="0,0,4,0" Click="Seek_Click" Tag="-1" />
+            <TextBlock x:Name="CurrentTimeText" VerticalAlignment="Center" Width="90" TextAlignment="Center" Margin="8,0,8,0" />
+            <Button Content="+1s" Width="50" Margin="0,0,4,0" Click="Seek_Click" Tag="1" />
+            <Button Content="+10s" Width="50" Margin="0,0,4,0" Click="Seek_Click" Tag="10" />
+            <Button Content="+30s" Width="50" Margin="0,0,16,0" Click="Seek_Click" Tag="30" />
+            <TextBlock Text="Go to (s):" VerticalAlignment="Center" Margin="0,0,4,0" />
+            <TextBox x:Name="GoToBox" Width="70" VerticalContentAlignment="Center" Margin="0,0,4,0" />
+            <Button Content="Go" Width="50" Click="GoTo_Click" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="8">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="0,0,16,0" Text="Drag a box around the logo bug." />
+            <Button Content="Confirm" Width="100" Margin="0,0,8,0" Click="Confirm_Click" IsEnabled="False" x:Name="ConfirmButton" />
+            <Button Content="Cancel" Width="100" Click="Cancel_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

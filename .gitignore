@@ -8,6 +8,8 @@ tablo.config.json
 ## ffmpeg binaries - download separately (see README)
 TabloExtractinator4000/tools/ffmpeg.exe
 TabloExtractinator4000/tools/ffprobe.exe
+CommercialCutter/ffmpeg.exe
+CommercialCutter/ffprobe.exe
 
 ## Sample data
 sample-data/
