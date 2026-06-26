@@ -236,21 +236,21 @@
             <!-- Step 3: catalog + analyze -->
             <TextBlock Text="3. Catalog and analyze" FontWeight="Bold" FontSize="16" Margin="0,0,0,4" />
             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedFg}" Margin="0,0,0,8"
-                       Text="Samples the logo spot every N seconds. If you know roughly how long the program should be once commercials are removed, enter it below and the analysis will automatically search for a similarity threshold that lands close to it." />
+                       Text="Samples the logo spot every N seconds. You can leave Expected program length blank — with Local adaptive mode and Refine cuts (below) both on, a safe built-in default is used automatically and doesn't need per-video tuning. Only fill this in if you already know the real length (e.g. from having cut this exact episode by hand before) and want a sanity check against it." />
             <DockPanel Margin="0,0,0,8" LastChildFill="False">
                 <TextBlock DockPanel.Dock="Left" Text="Sample interval (s):" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <TextBox x:Name="IntervalBox" DockPanel.Dock="Left" Width="60" Text="1" VerticalContentAlignment="Center" Margin="0,0,16,0" />
-                <TextBlock DockPanel.Dock="Left" Text="Expected program length (min):" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBlock DockPanel.Dock="Left" Text="Expected program length (min, optional):" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <TextBox x:Name="ExpectedLengthBox" DockPanel.Dock="Left" Width="60" Text="" VerticalContentAlignment="Center" />
             </DockPanel>
             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedFg}" Margin="0,0,0,8"
-                       Text="A single fixed similarity cutoff assumes the logo-present baseline never drifts across the episode — it often does (different scenes partially defeat the logo mask even with the bug on screen), which can hide a real break whose dip isn't deep in absolute terms. Local adaptive mode classifies each moment relative to a rolling local baseline instead. The window radius must comfortably exceed your longest expected ad break — too narrow and a long break drags its own baseline down with it, hiding itself; 300s (5 min) covers breaks up to 3-4 minutes." />
+                       Text="A single fixed similarity cutoff assumes the logo-present baseline never drifts across the episode — it often does (different scenes partially defeat the logo mask even with the bug on screen), which can hide a real break whose dip isn't deep in absolute terms. Local adaptive mode classifies each moment relative to a rolling local baseline instead, and is what's been tuned and verified here — stick with it unless you have a specific reason to switch. Absolute threshold is really only worth trying if adaptive mode is clearly misbehaving on a particular recording (e.g. wildly over- or under-detecting) and you want a single fixed cutoff to reason about directly; there's no general guidance for what number to type in there, you'd be eyeballing the similarity chart after a run." />
             <DockPanel Margin="0,0,0,8" LastChildFill="False">
                 <RadioButton x:Name="AdaptiveModeRadio" DockPanel.Dock="Left" GroupName="DetectionMode" Content="Local adaptive (recommended)" IsChecked="True" Checked="DetectionMode_Changed" />
                 <RadioButton x:Name="AbsoluteModeRadio" DockPanel.Dock="Left" GroupName="DetectionMode" Content="Absolute threshold" Checked="DetectionMode_Changed" />
             </DockPanel>
             <DockPanel x:Name="AdaptiveModePanel" Margin="0,0,0,8" LastChildFill="False">
-                <TextBlock DockPanel.Dock="Left" Text="Max dip from local baseline (optional):" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBlock DockPanel.Dock="Left" Text="Max dip from local baseline (optional — leave blank for the default):" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <TextBox x:Name="AdaptiveDipBox" DockPanel.Dock="Left" Width="60" Text="" VerticalContentAlignment="Center" Margin="0,0,16,0" />
                 <TextBlock DockPanel.Dock="Left" Text="Local window radius (s):" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <TextBox x:Name="LocalWindowSecondsBox" DockPanel.Dock="Left" Width="60" Text="300" VerticalContentAlignment="Center" />
@@ -268,7 +268,7 @@
                 <TextBox x:Name="MinBreakSecondsBox" DockPanel.Dock="Left" Width="60" Text="59" VerticalContentAlignment="Center" />
             </DockPanel>
             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedFg}" Margin="0,0,0,8"
-                       Text="The logo signal alone can land mid-fade. With this on, each cut point nudges onto the nearest black (or, failing that, silent) dip within the tolerance below, so the full fade-to-black/fade-up-from-black bumper stays with the program, not the ad. Requires an extra full decode pass." />
+                       Text="The logo signal alone can land mid-fade. With this on (recommended — also enables black-bridge detection for breaks where the bug stays on screen the whole time, and is what the safe default dip above relies on), each cut point nudges onto the nearest black (or, failing that, silent) dip within the tolerance below, so the full fade-to-black/fade-up-from-black bumper stays with the program, not the ad. Requires an extra full decode pass. The default of 6s is fine for nearly everything — it only needs to comfortably cover the length of a typical fade, not the length of the break itself; raise it only if you see a cut consistently landing a few seconds short of a clean black frame." />
             <DockPanel Margin="0,0,0,8" LastChildFill="False">
                 <CheckBox x:Name="RefineTransitionsCheckBox" DockPanel.Dock="Left" Content="Refine cuts to black/silence dips" IsChecked="True" Margin="0,0,16,0" />
                 <TextBlock DockPanel.Dock="Left" Text="Max nudge (s):" VerticalAlignment="Center" Margin="0,0,8,0" />

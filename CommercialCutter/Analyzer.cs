@@ -15,6 +15,14 @@ public static class Analyzer
     // flickering briefly during transitions/bugs without flipping state.
     private const int DebounceSamples = 5;
 
+    // The local-adaptive dip that, once corroboration and black-bridging are both active, needs
+    // no per-video tuning — those two are what actually reject false positives, not the raw
+    // threshold (confirmed by sweeping a wide range of dip values against hand-cut ground truth:
+    // results were stable across roughly 0.05-0.10, degrading only once the dip got loose enough
+    // to start missing real corroborated breaks). Shared so the GUI can use the exact same value
+    // as its "no expected length, no manual dip" default, not just FindAdaptiveThresholdForTarget.
+    public const double SafeDefaultDip = 0.05;
+
     // Scores every thumbnail's similarity to the reference logo crop. Classification
     // (what threshold counts as "logo present") happens separately in BuildSegments,
     // so the same scores can be re-classified at different thresholds without re-reading images.
@@ -840,16 +848,15 @@ public static class Analyzer
         // raw threshold. So: try that first, and only fall back to the full grid search if it
         // lands well outside the user's expected length — a sign this content doesn't fit the
         // usual pattern and the length target is the best signal available after all.
-        const double safeDip = 0.05;
         if (blackIntervals is not null && silenceIntervals is not null)
         {
-            var safeSegments = BuildSegmentsAdaptiveFromBaseline(scores, intervalSeconds, safeDip, baseline, adUnitSeconds, minBreakSeconds);
+            var safeSegments = BuildSegmentsAdaptiveFromBaseline(scores, intervalSeconds, SafeDefaultDip, baseline, adUnitSeconds, minBreakSeconds);
             safeSegments = ValidateBreaksAgainstBumpers(safeSegments, blackIntervals, silenceIntervals);
             safeSegments = RefineBoundariesWithBlackAndSilence(safeSegments, blackIntervals, silenceIntervals, maxNudgeSeconds);
             safeSegments = MergeBlackBridgedBreaks(safeSegments, bridgedBreaks);
             var safeProgramTotal = safeSegments.Where(s => !s.IsCommercial).Sum(s => s.DurationSeconds);
             if (Math.Abs(safeProgramTotal - targetProgramSeconds) <= Math.Max(180.0, targetProgramSeconds * 0.1))
-                return (safeSegments, safeDip);
+                return (safeSegments, SafeDefaultDip);
         }
 
         for (int i = 0; i <= gridSteps; i++)

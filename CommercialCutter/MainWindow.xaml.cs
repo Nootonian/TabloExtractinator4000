@@ -378,10 +378,24 @@ public partial class MainWindow : Window
 
         if (!hasManualThreshold && !hasExpectedLength)
         {
-            Log(isAdaptive
-                ? "Enter either an expected program length or a manual max-dip value."
-                : "Enter either an expected program length or a manual similarity threshold.");
-            return;
+            // Neither field is required: with corroboration (the bumper-evidence checks, not the
+            // raw threshold) on, a small fixed dip already gets excellent results regardless of
+            // the specific recording — see Analyzer.SafeDefaultDip. Only fall back to demanding
+            // an input when there's no corroboration evidence to lean on, or in absolute-
+            // threshold mode, where there's no equally portable safe default to reach for.
+            if (isAdaptive && RefineTransitionsCheckBox.IsChecked == true)
+            {
+                manualDip = Analyzer.SafeDefaultDip;
+                hasManualThreshold = true;
+                Log($"No expected length or manual dip given — using the safe default ({Analyzer.SafeDefaultDip:F2}) since black/silence refinement is on.");
+            }
+            else
+            {
+                Log(isAdaptive
+                    ? "Enter either an expected program length or a manual max-dip value."
+                    : "Enter either an expected program length or a manual similarity threshold.");
+                return;
+            }
         }
         var localWindowSeconds = 300.0;
         if (isAdaptive &&
@@ -853,10 +867,19 @@ public partial class MainWindow : Window
         var hasExpectedLength  = double.TryParse(ExpectedLengthBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var expectedMinutes);
         if (!hasManualThreshold && !hasExpectedLength)
         {
-            Log(isAdaptive
+            if (isAdaptive && RefineTransitionsCheckBox.IsChecked == true)
+            {
+                manualDip = Analyzer.SafeDefaultDip;
+                hasManualThreshold = true;
+                Log($"No expected length or manual dip given — using the safe default ({Analyzer.SafeDefaultDip:F2}) since black/silence refinement is on.");
+            }
+            else
+            {
+                Log(isAdaptive
                 ? "Enter either an expected program length or a manual max-dip value (step 3)."
                 : "Enter either an expected program length or a manual similarity threshold (step 3).");
-            return;
+                return;
+            }
         }
         var localWindowSeconds = 300.0;
         if (isAdaptive &&
