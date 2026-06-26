@@ -704,6 +704,16 @@ public static class Analyzer
     {
         var evaluated = new List<(double Candidate, double Diff)>(gridSteps + 1);
 
+        // Black-bridged breaks (bug stays visible through the pod) don't depend on the logo
+        // candidate at all, so they're found once and folded into every grid point's evaluation.
+        // Without this, the search target (programTotal) only reflects what the logo path can
+        // ever see — which, for content where bridging finds most of the real ad time, can never
+        // get anywhere near the target no matter the threshold, so the search converges on
+        // whatever degenerate point happens to minimize an unreachable objective instead of the
+        // threshold that's actually right once the real pipeline (which does include bridging)
+        // runs.
+        var bridgedBreaks = blackIntervals is not null ? FindBlackBridgedBreaks(blackIntervals) : new List<(double Start, double End)>();
+
         for (int i = 0; i <= gridSteps; i++)
         {
             double candidate = (double)i / gridSteps;
@@ -712,6 +722,7 @@ public static class Analyzer
             {
                 segments = ValidateBreaksAgainstBumpers(segments, blackIntervals, silenceIntervals);
                 segments = RefineBoundariesWithBlackAndSilence(segments, blackIntervals, silenceIntervals, maxNudgeSeconds);
+                segments = MergeBlackBridgedBreaks(segments, bridgedBreaks);
             }
             double programTotal = segments.Where(s => !s.IsCommercial).Sum(s => s.DurationSeconds);
             evaluated.Add((candidate, Math.Abs(programTotal - targetProgramSeconds)));
@@ -723,6 +734,7 @@ public static class Analyzer
         {
             finalSegments = ValidateBreaksAgainstBumpers(finalSegments, blackIntervals, silenceIntervals);
             finalSegments = RefineBoundariesWithBlackAndSilence(finalSegments, blackIntervals, silenceIntervals, maxNudgeSeconds);
+            finalSegments = MergeBlackBridgedBreaks(finalSegments, bridgedBreaks);
         }
         return (finalSegments, chosen);
     }
@@ -758,6 +770,10 @@ public static class Analyzer
         var baseline = ComputeLocalBaseline(scores, intervalSeconds, windowRadiusSeconds);
         var evaluated = new List<(double Candidate, double Diff)>(gridSteps + 1);
 
+        // See FindThresholdForTarget's matching comment — without this, the search target never
+        // reflects what the real pipeline (which folds in bridging afterward) actually produces.
+        var bridgedBreaks = blackIntervals is not null ? FindBlackBridgedBreaks(blackIntervals) : new List<(double Start, double End)>();
+
         for (int i = 0; i <= gridSteps; i++)
         {
             double candidate = maxDrop * i / gridSteps;
@@ -766,6 +782,7 @@ public static class Analyzer
             {
                 segments = ValidateBreaksAgainstBumpers(segments, blackIntervals, silenceIntervals);
                 segments = RefineBoundariesWithBlackAndSilence(segments, blackIntervals, silenceIntervals, maxNudgeSeconds);
+                segments = MergeBlackBridgedBreaks(segments, bridgedBreaks);
             }
             double programTotal = segments.Where(s => !s.IsCommercial).Sum(s => s.DurationSeconds);
             evaluated.Add((candidate, Math.Abs(programTotal - targetProgramSeconds)));
@@ -777,6 +794,7 @@ public static class Analyzer
         {
             finalSegments = ValidateBreaksAgainstBumpers(finalSegments, blackIntervals, silenceIntervals);
             finalSegments = RefineBoundariesWithBlackAndSilence(finalSegments, blackIntervals, silenceIntervals, maxNudgeSeconds);
+            finalSegments = MergeBlackBridgedBreaks(finalSegments, bridgedBreaks);
         }
         return (finalSegments, chosen);
     }
