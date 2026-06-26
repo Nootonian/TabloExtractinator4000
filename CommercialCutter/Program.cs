@@ -122,28 +122,13 @@ public static class Program
         var referencePath = Path.Combine(configDir, "reference_logo.jpg");
         await Cataloger.CatalogReferenceCropAsync(video, sampleAt, crop, referencePath);
 
-        var (w, h) = await GetFrameSizeAsync(video);
+        var (w, h) = await Ffmpeg.GetFrameSizeAsync(video);
         var config = new CutterConfig(crop, referencePath, w, h);
         ConfigStore.SaveConfig(configPath, config);
 
         Console.WriteLine($"Saved config to {configPath}");
         Console.WriteLine($"Crop: x={crop.X} y={crop.Y} w={crop.Width} h={crop.Height}");
         return 0;
-    }
-
-    private static async Task<(int Width, int Height)> GetFrameSizeAsync(string video)
-    {
-        var (code, stdout, stderr) = await Ffmpeg.RunFfprobeAsync(new[]
-        {
-            "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=width,height",
-            "-of", "csv=p=0",
-            video,
-        });
-        if (code != 0) throw new InvalidOperationException($"ffprobe failed: {stderr}");
-        var parts = stdout.Trim().Split(',');
-        return (int.Parse(parts[0], CultureInfo.InvariantCulture), int.Parse(parts[1], CultureInfo.InvariantCulture));
     }
 
     private static async Task<int> CatalogAsync(string[] a)

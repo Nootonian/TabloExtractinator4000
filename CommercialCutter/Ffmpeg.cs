@@ -210,4 +210,23 @@ public static class Ffmpeg
 
         return double.Parse(stdout.Trim(), System.Globalization.CultureInfo.InvariantCulture);
     }
+
+    public static async Task<(int Width, int Height)> GetFrameSizeAsync(string videoPath, CancellationToken ct = default)
+    {
+        var (code, stdout, stderr) = await RunFfprobeAsync(new[]
+        {
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=p=0",
+            videoPath,
+        }, ct);
+
+        if (code != 0)
+            throw new InvalidOperationException($"ffprobe failed: {stderr.Trim()}");
+
+        var parts = stdout.Trim().Split(',');
+        return (int.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture),
+                int.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture));
+    }
 }

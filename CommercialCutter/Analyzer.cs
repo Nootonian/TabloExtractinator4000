@@ -49,6 +49,30 @@ public static class Analyzer
         return scores;
     }
 
+    // Quick batch-compatibility check: given a handful of sample crops from a candidate
+    // recording, returns the highest similarity seen against the reference logo. A genuine
+    // match should show the bug clearly during ordinary program content at least some of the
+    // time, so the *max* across a few samples (not the average) is the right statistic — it only
+    // takes one frame catching the bug to confirm this crop region means something for this
+    // file. A file with the wrong crop position, a different bug entirely, or no bug at all
+    // will have every sample stuck at a low, noisy similarity instead.
+    public static double EstimateMaxLogoSimilarity(string referenceImagePath, IEnumerable<string> sampleFramePaths)
+    {
+        using var reference = Image.Load<Rgba32>(referenceImagePath);
+        reference.Mutate(x => x.Resize(64, 64));
+        var mask = BuildLogoMask(reference);
+
+        var best = 0.0;
+        foreach (var path in sampleFramePaths)
+        {
+            using var frame = Image.Load<Rgba32>(path);
+            frame.Mutate(x => x.Resize(64, 64));
+            var similarity = PixelSimilarity(reference, frame, mask);
+            if (similarity > best) best = similarity;
+        }
+        return best;
+    }
+
     // Marks pixels whose luma differs enough from the reference crop's background to likely
     // be part of the logo glyph itself, rather than the backdrop behind it. Falls back to
     // using every pixel if that yields too few (e.g. a logo with very low contrast).

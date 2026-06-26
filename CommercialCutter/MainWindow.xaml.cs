@@ -732,6 +732,103 @@ public partial class MainWindow : Window
 
         BatchInfoText.Text = $"{BatchFiles.Count} video file(s) found.";
         StartBatchButton.IsEnabled = BatchFiles.Count > 0 && _configPath is not null;
+        CheckCompatibilityButton.IsEnabled = BatchFiles.Count > 0 && _configPath is not null;
+    }
+
+    // Quick per-file screen so a folder that mixes recordings from different shows/channels
+    // doesn't have to be sorted by hand first. Checks resolution against the config (a fast,
+    // deterministic mismatch) and, if that passes, samples a handful of frames spread across the
+    // middle of the recording and compares them to the reference logo crop — cheap compared to
+    // the full catalog+analyze+cut pipeline, since it's a few single-frame extracts instead of a
+    // full decode pass. Anything that doesn't look like a match gets unticked, not removed, so
+    // it's easy to double check or re-include by hand.
+    private async void CheckCompatibility_Click(object sender, RoutedEventArgs e)
+    {
+        if (_configPath is null || !File.Exists(_configPath))
+        {
+            Log("Mark the logo box (step 2) on a sample episode before checking compatibility.");
+            return;
+        }
+        var config = ConfigStore.LoadConfig(_configPath);
+        const int sampleCount = 8;
+        const double matchThreshold = 0.85;
+
+        CheckCompatibilityButton.IsEnabled = false;
+        StartBatchButton.IsEnabled = false;
+        try
+        {
+            await RunWithProgressAsync(async (progress, ct) =>
+            {
+                int i = 0;
+                foreach (var row in BatchFiles)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    i++;
+                    BatchInfoText.Text = $"Checking compatibility {i} of {BatchFiles.Count}: {row.RelativePath}";
+                    row.Status = "Checking";
+
+                    try
+                    {
+                        var (width, height) = await Ffmpeg.GetFrameSizeAsync(row.FullPath, ct);
+                        if (width != config.FrameWidth || height != config.FrameHeight)
+                        {
+                            row.Included = false;
+                            row.Status = $"Skipped: resolution {width}x{height} ≠ {config.FrameWidth}x{config.FrameHeight}";
+                            continue;
+                        }
+
+                        var duration = await Ffmpeg.GetDurationSecondsAsync(row.FullPath, ct);
+                        var sampleDir = Path.Combine(LocalPaths.GetWorkDir(row.FullPath), "compat_samples");
+                        Directory.CreateDirectory(sampleDir);
+                        foreach (var f in Directory.GetFiles(sampleDir, "*.jpg")) File.Delete(f);
+
+                        var samplePaths = new List<string>();
+                        for (int s = 0; s < sampleCount; s++)
+                        {
+                            // Middle 80% of the recording, avoiding intro/outro junk at either edge.
+                            var t = duration * (0.1 + 0.8 * s / (sampleCount - 1));
+                            var outPath = Path.Combine(sampleDir, $"sample_{s}.jpg");
+                            await Cataloger.CatalogReferenceCropAsync(row.FullPath, t, config.Crop, outPath, ct);
+                            samplePaths.Add(outPath);
+                        }
+
+                        var maxSimilarity = await Task.Run(
+                            () => Analyzer.EstimateMaxLogoSimilarity(config.ReferenceImagePath, samplePaths), ct);
+
+                        if (maxSimilarity < matchThreshold)
+                        {
+                            row.Included = false;
+                            row.Status = $"Skipped: logo not found (best match {maxSimilarity:F2})";
+                        }
+                        else
+                        {
+                            row.Status = $"OK (best match {maxSimilarity:F2})";
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        row.Status = "Aborted";
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        row.Included = false;
+                        row.Status = $"Skipped: {ex.Message}";
+                    }
+                }
+            }, "Checking batch compatibility...");
+        }
+        catch (OperationCanceledException)
+        {
+            Log("Compatibility check aborted.");
+        }
+        finally
+        {
+            var skipped = BatchFiles.Count(r => !r.Included);
+            BatchInfoText.Text = $"Compatibility check complete — {BatchFiles.Count - skipped} ready, {skipped} flagged.";
+            CheckCompatibilityButton.IsEnabled = true;
+            StartBatchButton.IsEnabled = BatchFiles.Count > 0 && _configPath is not null;
+        }
     }
 
     private async void StartBatch_Click(object sender, RoutedEventArgs e)
@@ -814,6 +911,11 @@ public partial class MainWindow : Window
                 foreach (var row in BatchFiles)
                 {
                     ct.ThrowIfCancellationRequested();
+                    if (!row.Included)
+                    {
+                        row.Status = "Skipped (unticked)";
+                        continue;
+                    }
                     BatchInfoText.Text = $"Processing {done + failed + 1} of {BatchFiles.Count}: {row.RelativePath}";
 
                     try
@@ -902,7 +1004,9 @@ public partial class MainWindow : Window
         }
         finally
         {
-            BatchInfoText.Text = $"Batch complete — {done} done, {failed} failed, {BatchFiles.Count - done - failed} not reached.";
+            var skipped = BatchFiles.Count(r => !r.Included);
+            BatchInfoText.Text = $"Batch complete — {done} done, {failed} failed, {skipped} skipped, " +
+                                  $"{BatchFiles.Count - done - failed - skipped} not reached.";
             StartBatchButton.IsEnabled = true;
         }
     }

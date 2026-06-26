@@ -358,15 +358,22 @@
                 <Button DockPanel.Dock="Right" Content="Browse..." Width="90" Click="BrowseBatchFolder_Click" />
                 <TextBox x:Name="BatchFolderBox" IsReadOnly="True" Margin="0,0,8,0" VerticalContentAlignment="Center" />
             </DockPanel>
+            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedFg}" Margin="0,0,0,8"
+                       Text="If the folder mixes recordings that don't all have the same resolution or logo bug (e.g. a different show or channel mixed in), run Check Compatibility first — it samples a few frames per file and unticks anything that doesn't match, without running the full analysis on it." />
             <DataGrid x:Name="BatchGrid" Height="180" AutoGenerateColumns="False" CanUserAddRows="False"
-                      IsReadOnly="True" Margin="0,0,0,8">
+                      Margin="0,0,0,8">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="File" Binding="{Binding RelativePath}" Width="*" />
-                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="160" />
+                    <DataGridCheckBoxColumn Header="Include" Binding="{Binding Included}" Width="60" />
+                    <DataGridTextColumn Header="File" Binding="{Binding RelativePath}" Width="*" IsReadOnly="True" />
+                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="280" IsReadOnly="True" />
                 </DataGrid.Columns>
             </DataGrid>
-            <Button x:Name="StartBatchButton" Content="Start Batch" Width="160" HorizontalAlignment="Left"
-                    Click="StartBatch_Click" IsEnabled="False" Margin="0,0,0,8" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <Button x:Name="CheckCompatibilityButton" Content="Check Compatibility" Width="160"
+                        Click="CheckCompatibility_Click" IsEnabled="False" Margin="0,0,8,0" />
+                <Button x:Name="StartBatchButton" Content="Start Batch" Width="160"
+                        Click="StartBatch_Click" IsEnabled="False" />
+            </StackPanel>
             <TextBlock x:Name="BatchInfoText" Foreground="{StaticResource MutedFg}" Margin="0,0,0,16" />
 
             <TextBlock Text="Status" FontWeight="Bold" Margin="0,8,0,4" />
