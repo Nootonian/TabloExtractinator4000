@@ -63,6 +63,24 @@ else
     Console.WriteLine($"Settled on drop threshold {drop:F4}");
 }
 
+if (args.Contains("--dump-grid"))
+{
+    var baseline = Analyzer.ComputeLocalBaseline(scores, interval, 400.0);
+    var bridged = Analyzer.FindBlackBridgedBreaks(black);
+    var target = expectedMinutes * 60.0;
+    for (int i = 0; i <= 200; i++)
+    {
+        double candidate = 0.6 * i / 200;
+        var segs = Analyzer.BuildSegmentsAdaptiveFromBaseline(scores, interval, candidate, baseline);
+        segs = Analyzer.ValidateBreaksAgainstBumpers(segs, black, silence);
+        segs = Analyzer.RefineBoundariesWithBlackAndSilence(segs, black, silence);
+        segs = Analyzer.MergeBlackBridgedBreaks(segs, bridged);
+        double programTotal = segs.Where(s => !s.IsCommercial).Sum(s => s.DurationSeconds);
+        Console.WriteLine($"{candidate:F4}\t{programTotal:F1}\t{Math.Abs(programTotal - target):F1}\t{segs.Count(s => s.IsCommercial)}");
+    }
+    return 0;
+}
+
 if (args.Contains("--bridge"))
 {
     var bridged = Analyzer.FindBlackBridgedBreaks(black);

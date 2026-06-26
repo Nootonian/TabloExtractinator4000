@@ -653,28 +653,43 @@ public static class Analyzer
         return merged;
     }
 
-    // Folds black-bridged candidates into a logo-detected segment list, but only where they'd
-    // fill in a stretch the logo signal called program — if logo-detection already found a
-    // commercial there (even with slightly different boundaries), trust that over the bridge
-    // candidate rather than risk double-counting or fighting over the exact edges.
+    // Folds black-bridged candidates into a logo-detected segment list, stamping the bridge's
+    // own boundaries over whatever was there before — including an existing commercial segment,
+    // not just a program one. A bridge candidate is backed by clean, isolated black brackets on
+    // both sides; a logo-path commercial nearby is only as good as wherever the threshold search
+    // happened to land, which can clip a break short (e.g. the raw dip is brief even though the
+    // real pod runs much longer once you look at where it's actually bracketed by black). Letting
+    // the logo path's guess win by default — only filling in pure-program gaps — left exactly
+    // that kind of short, wrong commercial in place instead of the bridge's more precise span.
     public static List<Segment> MergeBlackBridgedBreaks(List<Segment> segments, List<(double Start, double End)> bridgedBreaks)
     {
         var result = new List<Segment>(segments);
 
         foreach (var (bridgeStart, bridgeEnd) in bridgedBreaks)
         {
-            var hostIndex = result.FindIndex(s => !s.IsCommercial && s.StartSeconds <= bridgeStart && s.EndSeconds >= bridgeEnd);
-            if (hostIndex < 0) continue;
+            var stamped = new List<Segment>();
+            var inserted = false;
 
-            var host = result[hostIndex];
-            result.RemoveAt(hostIndex);
-            var insertAt = hostIndex;
+            foreach (var seg in result)
+            {
+                if (seg.EndSeconds <= bridgeStart || seg.StartSeconds >= bridgeEnd)
+                {
+                    stamped.Add(seg);
+                    continue;
+                }
 
-            if (host.StartSeconds < bridgeStart - 0.01)
-                result.Insert(insertAt++, new Segment(host.StartSeconds, bridgeStart, false));
-            result.Insert(insertAt++, new Segment(bridgeStart, bridgeEnd, true));
-            if (bridgeEnd < host.EndSeconds - 0.01)
-                result.Insert(insertAt, new Segment(bridgeEnd, host.EndSeconds, false));
+                if (seg.StartSeconds < bridgeStart - 0.01)
+                    stamped.Add(new Segment(seg.StartSeconds, bridgeStart, seg.IsCommercial));
+                if (!inserted)
+                {
+                    stamped.Add(new Segment(bridgeStart, bridgeEnd, true));
+                    inserted = true;
+                }
+                if (seg.EndSeconds > bridgeEnd + 0.01)
+                    stamped.Add(new Segment(bridgeEnd, seg.EndSeconds, seg.IsCommercial));
+            }
+
+            result = stamped;
         }
 
         return result;
@@ -742,15 +757,32 @@ public static class Analyzer
     // Picking the single candidate closest to the target is fragile when the objective is
     // non-monotonic (see FindThresholdForTarget): a single degenerate point (e.g. an almost
     // empty segmentation) can coincidentally land closer to the target number than any sensible
-    // threshold does, purely by chance cancellation. Instead, find every candidate within a
-    // tolerance band of the best score — the "plateau" of comparably-good answers — and return
-    // their median. A real, stable answer should have other reasonable candidates near it that
-    // perform almost as well; a lucky degenerate fluke usually doesn't.
+    // threshold does, purely by chance cancellation. So instead: find the single best-scoring
+    // point, then expand outward from it only while each next neighbor stays within a tolerance
+    // band of that best score — the *contiguous* plateau of comparably-good answers around the
+    // genuine optimum — and return its median.
+    //
+    // Critically, this must walk outward from the best point rather than collecting every
+    // qualifying point anywhere in the grid. Once corroboration is in the loop, raw classification
+    // tends to flatten out completely past some threshold (nothing left to detect, so every
+    // higher candidate gives the exact same degenerate result) — that flat tail can span most of
+    // the grid. If "plateau" meant "every point within the band," that tail's sheer size would
+    // swamp the median even when a much better, narrower plateau exists elsewhere — which is
+    // exactly what was happening before this was scoped to a contiguous walk.
     private static double PickPlateauMedian(List<(double Candidate, double Diff)> evaluated)
     {
-        var bestDiff = evaluated.Min(e => e.Diff);
+        var bestIndex = 0;
+        for (int i = 1; i < evaluated.Count; i++)
+            if (evaluated[i].Diff < evaluated[bestIndex].Diff) bestIndex = i;
+
+        var bestDiff = evaluated[bestIndex].Diff;
         var band = Math.Max(30.0, bestDiff * 1.5);
-        var plateau = evaluated.Where(e => e.Diff <= bestDiff + band).Select(e => e.Candidate).OrderBy(c => c).ToList();
+
+        int lo = bestIndex, hi = bestIndex;
+        while (lo > 0 && evaluated[lo - 1].Diff <= bestDiff + band) lo--;
+        while (hi < evaluated.Count - 1 && evaluated[hi + 1].Diff <= bestDiff + band) hi++;
+
+        var plateau = evaluated.Skip(lo).Take(hi - lo + 1).Select(e => e.Candidate).OrderBy(c => c).ToList();
         return plateau[plateau.Count / 2];
     }
 
@@ -773,6 +805,28 @@ public static class Analyzer
         // See FindThresholdForTarget's matching comment — without this, the search target never
         // reflects what the real pipeline (which folds in bridging afterward) actually produces.
         var bridgedBreaks = blackIntervals is not null ? FindBlackBridgedBreaks(blackIntervals) : new List<(double Start, double End)>();
+
+        // Program-length matching is too coarse a signal once corroboration is doing the real
+        // precision work: missing one short break barely moves the total, so the "best" length
+        // match and a result that's missing a genuine break can come out nearly tied — and worse,
+        // there's often no sharp step in between them for a plateau walk to stop at, so it can't
+        // reliably tell the two apart (see PickPlateauMedian's history for the dead end that
+        // motivated this). A small fixed dip already gets excellent results once corroboration
+        // and bridging are active, since they're what actually reject false positives, not the
+        // raw threshold. So: try that first, and only fall back to the full grid search if it
+        // lands well outside the user's expected length — a sign this content doesn't fit the
+        // usual pattern and the length target is the best signal available after all.
+        const double safeDip = 0.05;
+        if (blackIntervals is not null && silenceIntervals is not null)
+        {
+            var safeSegments = BuildSegmentsAdaptiveFromBaseline(scores, intervalSeconds, safeDip, baseline, adUnitSeconds, minBreakSeconds);
+            safeSegments = ValidateBreaksAgainstBumpers(safeSegments, blackIntervals, silenceIntervals);
+            safeSegments = RefineBoundariesWithBlackAndSilence(safeSegments, blackIntervals, silenceIntervals, maxNudgeSeconds);
+            safeSegments = MergeBlackBridgedBreaks(safeSegments, bridgedBreaks);
+            var safeProgramTotal = safeSegments.Where(s => !s.IsCommercial).Sum(s => s.DurationSeconds);
+            if (Math.Abs(safeProgramTotal - targetProgramSeconds) <= Math.Max(180.0, targetProgramSeconds * 0.1))
+                return (safeSegments, safeDip);
+        }
 
         for (int i = 0; i <= gridSteps; i++)
         {
