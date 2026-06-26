@@ -37,8 +37,8 @@ public static class Cutter
 
         var outputDuration = keep.Sum(s => s.DurationSeconds);
         var videoCodecArgs = useNvenc
-            ? new[] { "-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "20", "-b:v", "0" }
-            : new[] { "-c:v", "libx264", "-preset", "fast", "-crf", "20" };
+            ? new[] { "-c:v", "hevc_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "20", "-b:v", "0", "-tag:v", "hvc1" }
+            : new[] { "-c:v", "libx265", "-preset", "fast", "-crf", "20", "-tag:v", "hvc1" };
 
         var workDir = LocalPaths.GetWorkDir(videoPath);
         var tempVideoPath = Path.Combine(workDir, "cut_video.mp4");
@@ -145,8 +145,8 @@ public static class Cutter
         var combinedLog = new StringBuilder();
 
         var videoCodecArgs = useNvenc
-            ? new[] { "-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "20", "-b:v", "0" }
-            : new[] { "-c:v", "libx264", "-preset", "fast", "-crf", "20" };
+            ? new[] { "-c:v", "hevc_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "20", "-b:v", "0", "-tag:v", "hvc1" }
+            : new[] { "-c:v", "libx265", "-preset", "fast", "-crf", "20", "-tag:v", "hvc1" };
 
         try
         {

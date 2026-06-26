@@ -152,14 +152,14 @@ public static class Ffmpeg
         return (black, silence);
     }
 
-    // Checks whether this ffmpeg build can use the NVIDIA NVENC H.264 encoder
+    // Checks whether this ffmpeg build can use the NVIDIA NVENC HEVC encoder
     // (present on RTX/GTX cards with up-to-date drivers).
     public static async Task<bool> IsNvencAvailableAsync(CancellationToken ct = default)
     {
         try
         {
             var (code, stdout, _) = await RunFfmpegAsync(new[] { "-hide_banner", "-encoders" }, ct);
-            return code == 0 && stdout.Contains("h264_nvenc", StringComparison.OrdinalIgnoreCase);
+            return code == 0 && stdout.Contains("hevc_nvenc", StringComparison.OrdinalIgnoreCase);
         }
         catch
         {
