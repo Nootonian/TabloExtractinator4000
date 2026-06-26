@@ -53,7 +53,7 @@ public static class Eval
 
         foreach (var line in lines)
         {
-            var m = System.Text.RegularExpressions.Regex.Match(line, @"cut\s+(\S+)\s+to\s+(\S+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var m = System.Text.RegularExpressions.Regex.Match(line, @"cut\s+(?:from\s+)?(\S+)\s+to\s+(\S+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             if (!m.Success) continue;
             var start = ParseTimeOrKeyword(m.Groups[1].Value, recordingDurationSeconds);
             var end = ParseTimeOrKeyword(m.Groups[2].Value, recordingDurationSeconds);

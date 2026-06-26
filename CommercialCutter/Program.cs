@@ -172,7 +172,8 @@ public static class Program
             var (black, silence) = await Ffmpeg.DetectBlackAndSilenceAsync(refineVideoPath, duration);
             segments = Analyzer.ValidateBreaksAgainstBumpers(segments, black, silence);
             segments = Analyzer.RefineBoundariesWithBlackAndSilence(segments, black, silence, maxNudgeSeconds);
-            var bridged = Analyzer.FindBlackBridgedBreaks(black);
+            var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, 300.0);
+            var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
             segments = Analyzer.MergeBlackBridgedBreaks(segments, bridged);
             Console.WriteLine($"Found {black.Count} black dip(s), {silence.Count} silent dip(s).");
         }
@@ -265,10 +266,6 @@ public static class Program
         var (segments, drop) = Analyzer.FindAdaptiveThresholdForTarget(
             scores, interval, expectedMinutes * 60.0, blackIntervals: black, silenceIntervals: silence);
         Console.WriteLine($"Settled on drop threshold {drop:F4}");
-
-        var bridged = Analyzer.FindBlackBridgedBreaks(black);
-        segments = Analyzer.MergeBlackBridgedBreaks(segments, bridged);
-        Console.WriteLine($"Black-bridged {bridged.Count} additional candidate(s).");
         Console.WriteLine();
 
         var groundTruth = Eval.ParseKeptIntervalsFromTsv(tsvPath);

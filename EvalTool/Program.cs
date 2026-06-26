@@ -66,7 +66,7 @@ else
 if (args.Contains("--dump-grid"))
 {
     var baseline = Analyzer.ComputeLocalBaseline(scores, interval, 400.0);
-    var bridged = Analyzer.FindBlackBridgedBreaks(black);
+    var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, baseline);
     var target = expectedMinutes * 60.0;
     for (int i = 0; i <= 200; i++)
     {
@@ -83,7 +83,8 @@ if (args.Contains("--dump-grid"))
 
 if (args.Contains("--bridge"))
 {
-    var bridged = Analyzer.FindBlackBridgedBreaks(black);
+    var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, 400.0);
+    var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
     Console.WriteLine($"Black-bridged candidates: {bridged.Count}");
     foreach (var b in bridged)
         Console.WriteLine($"  bridge {TimeSpan.FromSeconds(b.Start):hh\\:mm\\:ss} - {TimeSpan.FromSeconds(b.End):hh\\:mm\\:ss}");
@@ -98,7 +99,8 @@ if (args.Contains("--trim-promo"))
 }
 Console.WriteLine();
 
-var groundTruth = tsvPath.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+var isCutFormat = File.ReadAllLines(tsvPath).Any(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"cut\s+(?:from\s+)?\S+\s+to\s+\S+", System.Text.RegularExpressions.RegexOptions.IgnoreCase));
+var groundTruth = isCutFormat
     ? Eval.InvertCutsToKeptIntervals(Eval.ParseCutIntervalsFromTxt(tsvPath, duration), duration)
     : Eval.ParseKeptIntervalsFromTsv(tsvPath);
 var result = Eval.Score(segments, groundTruth, duration);

@@ -523,8 +523,11 @@ public partial class MainWindow : Window
                     // Some networks keep their bug visible through most of a commercial pod —
                     // logo-absence can't see that no matter the threshold, but the pod is still
                     // bracketed by cut-to-black bumpers. This catches those independently and
-                    // folds them in wherever the logo path called it program.
-                    var bridged = Analyzer.FindBlackBridgedBreaks(black);
+                    // folds them in wherever the logo path called it program. The similarity
+                    // scores/baseline guard against trusting black timing alone — see
+                    // FindBlackBridgedBreaks for why that matters.
+                    var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, localWindowSeconds);
+                    var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
                     var beforeBridgeCount = segments.Count(s => s.IsCommercial);
                     segments = Analyzer.MergeBlackBridgedBreaks(segments, bridged);
                     var addedCount = segments.Count(s => s.IsCommercial) - beforeBridgeCount;
@@ -987,7 +990,8 @@ public partial class MainWindow : Window
 
                         if (refineTransitions && black is not null)
                         {
-                            var bridged = Analyzer.FindBlackBridgedBreaks(black);
+                            var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, localWindowSeconds);
+                            var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
                             segments = Analyzer.MergeBlackBridgedBreaks(segments, bridged);
                         }
 

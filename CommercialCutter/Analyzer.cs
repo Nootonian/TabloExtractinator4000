@@ -620,9 +620,23 @@ public static class Analyzer
     // The floor is deliberately lower than the logo path's minBreakSeconds: a clean, isolated
     // black bracket on both sides is much stronger evidence than a bare similarity dip, so even
     // a single ~30s spot pod is plausible here without the same false-positive risk.
+    //
+    // But isolated black timing alone isn't sufficient either — a show with any dramatic content
+    // (fast-cut fight scenes, flashbacks) produces plenty of isolated black flashes that have
+    // nothing to do with commercials, and two of them can coincidentally land a plausible
+    // ad-pod-length apart purely by chance. A real "bug stays visible" pod still has to look like
+    // *something* in the logo signal — even if it never dips far enough to cross the configured
+    // threshold, real ad content is noisier/lower than clean program (confirmed against the case
+    // this function was built for: H&I's ad pods showed sustained, if shallow, dips throughout,
+    // not flat high similarity). So: require a meaningful fraction of the candidate span to read
+    // below baseline by at least a small margin — comfortably looser than the user's configured
+    // threshold, just enough to rule out "this span is confidently, uniformly logo-present, i.e.
+    // ordinary program" before trusting the black timing alone.
     public static List<(double Start, double End)> FindBlackBridgedBreaks(
         List<(double Start, double End)> blackIntervals,
-        double minBreakSeconds = 25.0, double maxBreakSeconds = 250.0, double isolationToleranceSeconds = 20.0)
+        List<SampleScore>? scores = null, double[]? baseline = null,
+        double minBreakSeconds = 25.0, double maxBreakSeconds = 250.0, double isolationToleranceSeconds = 20.0,
+        double minAbsentFraction = 0.15, double softDropMargin = 0.05)
     {
         // A real bumper sometimes registers as a tight double-flash (two separate blackdetect
         // hits a couple seconds apart) rather than one continuous dip. Left alone, that pair
@@ -661,11 +675,33 @@ public static class Analyzer
             var duration = gapEnd - gapStart;
             if (duration < minBreakSeconds || duration > maxBreakSeconds) { i++; continue; }
 
+            if (scores is not null && baseline is not null && !HasMeaningfulAbsence(scores, baseline, gapStart, gapEnd, softDropMargin, minAbsentFraction))
+            {
+                i++;
+                continue;
+            }
+
             candidates.Add((gapStart, gapEnd));
             i += 2;
         }
 
         return candidates;
+    }
+
+    private static bool HasMeaningfulAbsence(
+        List<SampleScore> scores, double[] baseline, double rangeStart, double rangeEnd,
+        double softDropMargin, double minAbsentFraction)
+    {
+        int total = 0, absent = 0;
+        foreach (var s in scores)
+        {
+            if (s.TimeSeconds < rangeStart || s.TimeSeconds > rangeEnd) continue;
+            var idx = (int)s.TimeSeconds;
+            if (idx >= baseline.Length) continue;
+            total++;
+            if (s.Similarity < baseline[idx] - softDropMargin) absent++;
+        }
+        return total > 0 && (double)absent / total >= minAbsentFraction;
     }
 
     private static List<(double Start, double End)> MergeCloseIntervals(
@@ -724,7 +760,21 @@ public static class Analyzer
             result = stamped;
         }
 
-        return result;
+        // A bridge candidate's boundary can land exactly where the logo path's own boundary
+        // already was (e.g. one bracketing the break's exit, the other its entry), leaving two
+        // adjacent same-type segments that are really one continuous break/program stretch.
+        // Cosmetic only — cut accuracy doesn't depend on it — but worth tidying up before it
+        // reaches the review grid.
+        var merged = new List<Segment>();
+        foreach (var seg in result)
+        {
+            if (merged.Count > 0 && merged[^1].IsCommercial == seg.IsCommercial)
+                merged[^1] = new Segment(merged[^1].StartSeconds, seg.EndSeconds, seg.IsCommercial);
+            else
+                merged.Add(seg);
+        }
+
+        return merged;
     }
 
     // Scans the similarity threshold over a fine grid so the resulting kept (program) duration
@@ -759,7 +809,8 @@ public static class Analyzer
         // whatever degenerate point happens to minimize an unreachable objective instead of the
         // threshold that's actually right once the real pipeline (which does include bridging)
         // runs.
-        var bridgedBreaks = blackIntervals is not null ? FindBlackBridgedBreaks(blackIntervals) : new List<(double Start, double End)>();
+        var bridgeBaseline = ComputeLocalBaseline(scores, intervalSeconds, 300.0);
+        var bridgedBreaks = blackIntervals is not null ? FindBlackBridgedBreaks(blackIntervals, scores, bridgeBaseline) : new List<(double Start, double End)>();
 
         for (int i = 0; i <= gridSteps; i++)
         {
@@ -836,7 +887,7 @@ public static class Analyzer
 
         // See FindThresholdForTarget's matching comment — without this, the search target never
         // reflects what the real pipeline (which folds in bridging afterward) actually produces.
-        var bridgedBreaks = blackIntervals is not null ? FindBlackBridgedBreaks(blackIntervals) : new List<(double Start, double End)>();
+        var bridgedBreaks = blackIntervals is not null ? FindBlackBridgedBreaks(blackIntervals, scores, baseline) : new List<(double Start, double End)>();
 
         // Program-length matching is too coarse a signal once corroboration is doing the real
         // precision work: missing one short break barely moves the total, so the "best" length
