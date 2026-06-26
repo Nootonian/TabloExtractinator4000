@@ -639,22 +639,24 @@ public static class Analyzer
         double minAbsentFraction = 0.15, double softDropMargin = 0.05)
     {
         // A real bumper sometimes registers as a tight double-flash (two separate blackdetect
-        // hits a couple seconds apart) rather than one continuous dip. Left alone, that pair
-        // poisons isolation on both sides — the first flash looks like a decoy crowding the real
-        // pairing from one side, and the second looks like a decoy crowding it from the other —
-        // so the genuine break gets thrown out by the very check meant to protect it. Merging
-        // anything within mergeToleranceSeconds into one combined dip before pairing fixes that
-        // without weakening the isolation check itself, which still runs on the merged list.
+        // hits a couple seconds apart) rather than one continuous dip, and a real break can also
+        // land right at the tail of a busy decoy cluster (e.g. immediately after the opening
+        // titles' own flicker — confirmed happening in practice on two different episodes).
+        // Left alone, both poison isolation — a nearby decoy looks like it's crowding the real
+        // pairing, so the genuine break gets thrown out by the very check meant to protect it.
+        // Merging anything within ChainGapToleranceSeconds (the same tolerance FindChainedDip
+        // uses to decide what counts as "one cluster") into a single combined dip fixes that.
         //
-        // This tolerance is deliberately much tighter than FindChainedDip's
-        // ChainGapToleranceSeconds: merging at that wider scale collapses an entire busy cluster
-        // (e.g. cold-open flickers plus the whole title sequence) down to one anchor whose
-        // *other* side then looks spuriously isolated, reintroducing exactly the phantom-bridge
+        // This was tried once before with just the isolation check in place and reverted — it
+        // let a stray candidate through (the merged cluster's *other* side ends up looking
+        // spuriously isolated, since the whole cluster collapsed to one anchor). What makes it
+        // safe now is the similarity check below: a phantom candidate spanning real, confidently-
+        // classified program won't show meaningful absence, so it gets rejected on that basis
+        // instead of relying on isolation distance alone to catch it.
         // problem this function exists to avoid. A break landing right at the tail of a long
         // decoy cluster (e.g. immediately after the titles) is a known remaining gap here — the
         // logo path with a reasonably low manual dip still catches those.
-        const double mergeToleranceSeconds = 5.0;
-        var sorted = MergeCloseIntervals(blackIntervals, mergeToleranceSeconds);
+        var sorted = MergeCloseIntervals(blackIntervals, ChainGapToleranceSeconds);
         var candidates = new List<(double Start, double End)>();
 
         // A greedy scan, not every consecutive pair: once dip i+1 is accepted as the *exit*
