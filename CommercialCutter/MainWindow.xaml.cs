@@ -215,11 +215,24 @@ public partial class MainWindow : Window
             double? savedSampleAt = null;
             if (File.Exists(_configPath))
             {
-                try { savedSampleAt = ConfigStore.LoadConfig(_configPath).SampleAtSeconds; }
+                try
+                {
+                    var existingConfig = ConfigStore.LoadConfig(_configPath);
+                    savedSampleAt = existingConfig.SampleAtSeconds;
+                    var c = existingConfig.Crop;
+                    BoxInfoText.Text = $"Box saved: x={c.X} y={c.Y} w={c.Width} h={c.Height}";
+                }
                 catch { /* ignore unreadable/older config — fall back to the default below */ }
+            }
+            else
+            {
+                BoxInfoText.Text = "";
             }
             SampleAtBox.Text = (savedSampleAt ?? _durationSeconds * 0.25).ToString("F0", CultureInfo.InvariantCulture);
             SelectBoxButton.IsEnabled = true;
+            // A box drawn in an earlier session means analysis can run immediately — no need to
+            // redraw it just because the app was restarted or a different video was opened first.
+            AnalyzeButton.IsEnabled = File.Exists(_configPath);
             Log($"Loaded {Path.GetFileName(_videoPath)} ({_durationSeconds:F0}s).");
 
             _nvencAvailable = await Ffmpeg.IsNvencAvailableAsync();
