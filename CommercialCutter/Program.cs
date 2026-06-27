@@ -177,6 +177,7 @@ public static class Program
             segments = Analyzer.MergeBlackBridgedBreaks(segments, bridged);
             Console.WriteLine($"Found {black.Count} black dip(s), {silence.Count} silent dip(s).");
             segments = Analyzer.RemoveDegenerateSegments(segments);
+            segments = Analyzer.ExtendLastSegmentToDuration(segments, duration);
         }
 
         ConfigStore.SaveSegments(segmentsPath, segments);

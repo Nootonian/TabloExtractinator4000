@@ -104,6 +104,8 @@ if (args.Contains("--trim-promo"))
     segments = Analyzer.TrimLeadingTrailingPromo(segments, black, silence, 90.0, duration);
     Console.WriteLine($"Trim-promo: {segments.Count(s => s.IsCommercial) - beforeCount} segment(s) added/changed");
 }
+segments = Analyzer.RemoveDegenerateSegments(segments);
+segments = Analyzer.ExtendLastSegmentToDuration(segments, duration);
 Console.WriteLine();
 
 var isCutFormat = File.ReadAllLines(tsvPath).Any(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"cut\s+(?:from\s+)?\S+\s+to\s+\S+", System.Text.RegularExpressions.RegexOptions.IgnoreCase));

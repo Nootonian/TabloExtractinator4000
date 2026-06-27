@@ -544,6 +544,7 @@ public partial class MainWindow : Window
                 }
 
                 segments = Analyzer.RemoveDegenerateSegments(segments);
+                segments = Analyzer.ExtendLastSegmentToDuration(segments, _durationSeconds);
                 ConfigStore.SaveSegments(_segmentsPath, segments);
 
                 Segments.Clear();
@@ -993,6 +994,7 @@ public partial class MainWindow : Window
                             segments = Analyzer.TrimLeadingTrailingPromo(segments, black, silence, maxPromoSeconds, duration);
 
                         segments = Analyzer.RemoveDegenerateSegments(segments);
+                        segments = Analyzer.ExtendLastSegmentToDuration(segments, duration);
 
                         // Batch mode keeps the original filename in place rather than producing a
                         // separate "_clean" copy: cut to a temp file first (ffmpeg is still reading

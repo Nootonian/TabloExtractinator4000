@@ -526,13 +526,20 @@ public static class Analyzer
         var last = result[^1];
         if (!last.IsCommercial)
         {
-            var dip = FindChainedDip(blackIntervals, recordingDurationSeconds, maxPromoSeconds, preferLatest: false, last.StartSeconds, last.EndSeconds)
-                      ?? FindChainedDip(silenceIntervals, recordingDurationSeconds, maxPromoSeconds / 2.0, preferLatest: false, last.StartSeconds, last.EndSeconds);
-            if (dip is not null && dip.Value.Start < last.EndSeconds - 0.5 && dip.Value.Start > last.StartSeconds)
+            // Cataloging can stop a few seconds short of the recording's true duration (e.g. an
+            // fps-filter rounding artifact), so the segment list's own last EndSeconds isn't a
+            // safe upper bound for candidates here — it can fall short of where the real closing
+            // bumper actually is, silently excluding it. recordingDurationSeconds is what's
+            // searched up to elsewhere in this method (the `time` to walk back from); the
+            // candidate window needs to reach just as far, or a real trailing dip located in that
+            // gap never gets considered at all.
+            var dip = FindChainedDip(blackIntervals, recordingDurationSeconds, maxPromoSeconds, preferLatest: false, last.StartSeconds, recordingDurationSeconds)
+                      ?? FindChainedDip(silenceIntervals, recordingDurationSeconds, maxPromoSeconds / 2.0, preferLatest: false, last.StartSeconds, recordingDurationSeconds);
+            if (dip is not null && dip.Value.Start < recordingDurationSeconds - 0.5 && dip.Value.Start > last.StartSeconds)
             {
                 var idx = result.Count - 1;
                 result[idx] = new Segment(last.StartSeconds, dip.Value.Start, false);
-                result.Add(new Segment(dip.Value.Start, last.EndSeconds, true));
+                result.Add(new Segment(dip.Value.Start, recordingDurationSeconds, true));
             }
         }
 
@@ -776,6 +783,21 @@ public static class Analyzer
             else
                 result.Add(seg);
         }
+        return result;
+    }
+
+    // Cataloging samples once per intervalSeconds and can stop a few seconds short of the
+    // recording's true duration (e.g. an fps-filter rounding artifact) — every segment list
+    // derived from it inherits that shortfall, which silently drops the last few seconds of the
+    // actual file from the cut output entirely (neither kept nor counted as removed). Stretching
+    // whatever segment is last out to the true duration fixes that regardless of its type.
+    public static List<Segment> ExtendLastSegmentToDuration(List<Segment> segments, double recordingDurationSeconds)
+    {
+        if (segments.Count == 0 || segments[^1].EndSeconds >= recordingDurationSeconds) return segments;
+
+        var result = new List<Segment>(segments);
+        var last = result[^1];
+        result[^1] = new Segment(last.StartSeconds, recordingDurationSeconds, last.IsCommercial);
         return result;
     }
 
