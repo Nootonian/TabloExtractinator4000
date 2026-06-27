@@ -88,8 +88,10 @@ if (args.Contains("--dump-grid"))
 
 if (args.Contains("--bridge"))
 {
+    var minAbsentArgIndex = Array.IndexOf(args, "--min-absent");
+    var minAbsentFraction = minAbsentArgIndex >= 0 ? double.Parse(args[minAbsentArgIndex + 1], CultureInfo.InvariantCulture) : 0.40;
     var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
-    var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
+    var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline, minAbsentFraction: minAbsentFraction);
     Console.WriteLine($"Black-bridged candidates: {bridged.Count}");
     foreach (var b in bridged)
         Console.WriteLine($"  bridge {TimeSpan.FromSeconds(b.Start):hh\\:mm\\:ss} - {TimeSpan.FromSeconds(b.End):hh\\:mm\\:ss}");

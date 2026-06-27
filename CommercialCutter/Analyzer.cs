@@ -642,11 +642,17 @@ public static class Analyzer
     // below baseline by at least a small margin — comfortably looser than the user's configured
     // threshold, just enough to rule out "this span is confidently, uniformly logo-present, i.e.
     // ordinary program" before trusting the black timing alone.
+    //
+    // 0.40 came from sweeping 0.15-0.70 against five episodes across three different shows: a
+    // real break's fraction was consistently 53-79%, while a real, standalone false candidate
+    // (no competing candidate to out-rank — just genuinely too weak on its own) measured ~20% on
+    // one show. 0.35-0.45 was a flat plateau with no regressions on any episode; 0.40 sits in the
+    // middle of it. Above ~0.50 it starts rejecting genuine breaks on the noisier shows.
     public static List<(double Start, double End)> FindBlackBridgedBreaks(
         List<(double Start, double End)> blackIntervals,
         List<SampleScore>? scores = null, double[]? baseline = null,
         double minBreakSeconds = 25.0, double maxBreakSeconds = 300.0, double isolationToleranceSeconds = 20.0,
-        double minAbsentFraction = 0.15, double softDropMargin = 0.05)
+        double minAbsentFraction = 0.40, double softDropMargin = 0.05)
     {
         // A real bumper sometimes registers as a tight double-flash (two separate blackdetect
         // hits a couple seconds apart) rather than one continuous dip, and a real break can also
@@ -811,12 +817,16 @@ public static class Analyzer
 
         // A bridge candidate's boundary can land exactly where the logo path's own boundary
         // already was (e.g. one bracketing the break's exit, the other its entry), leaving two
-        // adjacent same-type segments that are really one continuous break/program stretch.
-        // Cosmetic only — cut accuracy doesn't depend on it — but worth tidying up before it
-        // reaches the review grid.
+        // adjacent same-type segments that are really one continuous break/program stretch, or —
+        // when two *different*-type segments both happen to land on the exact same instant — a
+        // degenerate zero-length segment sandwiched between them. Cosmetic only — cut accuracy
+        // doesn't depend on it (Cutter already skips near-zero-duration kept segments) — but
+        // worth tidying up before either artifact reaches the review grid.
         var merged = new List<Segment>();
         foreach (var seg in result)
         {
+            if (seg.DurationSeconds <= 0.05) continue;
+
             if (merged.Count > 0 && merged[^1].IsCommercial == seg.IsCommercial)
                 merged[^1] = new Segment(merged[^1].StartSeconds, seg.EndSeconds, seg.IsCommercial);
             else
