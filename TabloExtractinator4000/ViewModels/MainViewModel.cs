@@ -407,7 +407,13 @@ public partial class MainViewModel : ObservableObject
         _jobByRecording[row.Recording] = job;
         ExportJobs.Add(vm);
 
-        RecomputeIsBusy();
+        // If extraction is already running, submit immediately rather than
+        // waiting for the whole batch to drain — the orchestrator's worker pool
+        // only runs MaxParallelDownloads at a time regardless, so this starts
+        // right away if a slot is free and queues behind the rest if not.
+        if (_autoExtracting) SubmitQueuedJobs();
+        else                 RecomputeIsBusy();
+
         ExportSelectedCommand.NotifyCanExecuteChanged();
         return true;
     }
