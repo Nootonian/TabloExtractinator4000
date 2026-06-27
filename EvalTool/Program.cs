@@ -44,11 +44,16 @@ var scores = Analyzer.ScoreThumbnails(thumbsDir, config.ReferenceImagePath, inte
 List<Segment> segments;
 double drop;
 var fixedDropArgIndex = Array.IndexOf(args, "--fixed-drop");
+var adUnitArgIndex = Array.IndexOf(args, "--ad-unit");
+var adUnitSeconds = adUnitArgIndex >= 0 ? double.Parse(args[adUnitArgIndex + 1], CultureInfo.InvariantCulture) : 15.0;
+var minBreakArgIndex = Array.IndexOf(args, "--min-break");
+var minBreakSeconds = minBreakArgIndex >= 0 ? double.Parse(args[minBreakArgIndex + 1], CultureInfo.InvariantCulture) : 59.0;
+
 if (fixedDropArgIndex >= 0)
 {
     drop = double.Parse(args[fixedDropArgIndex + 1], CultureInfo.InvariantCulture);
     var baseline = Analyzer.ComputeLocalBaseline(scores, interval, 400.0);
-    segments = Analyzer.BuildSegmentsAdaptiveFromBaseline(scores, interval, drop, baseline);
+    segments = Analyzer.BuildSegmentsAdaptiveFromBaseline(scores, interval, drop, baseline, adUnitSeconds, minBreakSeconds);
     Console.WriteLine($"Before corroboration: {segments.Count(s => s.IsCommercial)} commercial segment(s)");
     foreach (var s in segments.Where(s => s.IsCommercial))
         Console.WriteLine($"  raw AD {TimeSpan.FromSeconds(s.StartSeconds):hh\\:mm\\:ss} - {TimeSpan.FromSeconds(s.EndSeconds):hh\\:mm\\:ss}");
