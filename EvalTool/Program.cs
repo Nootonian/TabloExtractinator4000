@@ -90,8 +90,10 @@ if (args.Contains("--bridge"))
 {
     var minAbsentArgIndex = Array.IndexOf(args, "--min-absent");
     var minAbsentFraction = minAbsentArgIndex >= 0 ? double.Parse(args[minAbsentArgIndex + 1], CultureInfo.InvariantCulture) : 0.40;
+    var maxSpanArgIndex = Array.IndexOf(args, "--max-span");
+    var maxSpan = maxSpanArgIndex >= 0 ? int.Parse(args[maxSpanArgIndex + 1], CultureInfo.InvariantCulture) : 3;
     var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
-    var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline, minAbsentFraction: minAbsentFraction);
+    var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline, minAbsentFraction: minAbsentFraction, maxSpan: maxSpan);
     Console.WriteLine($"Black-bridged candidates: {bridged.Count}");
     foreach (var b in bridged)
         Console.WriteLine($"  bridge {TimeSpan.FromSeconds(b.Start):hh\\:mm\\:ss} - {TimeSpan.FromSeconds(b.End):hh\\:mm\\:ss}");

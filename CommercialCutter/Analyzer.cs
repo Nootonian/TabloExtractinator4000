@@ -668,7 +668,7 @@ public static class Analyzer
         List<(double Start, double End)> blackIntervals,
         List<SampleScore>? scores = null, double[]? baseline = null,
         double minBreakSeconds = 25.0, double maxBreakSeconds = 300.0, double isolationToleranceSeconds = 20.0,
-        double minAbsentFraction = 0.40, double softDropMargin = 0.05)
+        double minAbsentFraction = 0.40, double softDropMargin = 0.05, int maxSpan = 3)
     {
         // A real bumper sometimes registers as a tight double-flash (two separate blackdetect
         // hits a couple seconds apart) rather than one continuous dip, and a real break can also
@@ -704,7 +704,6 @@ public static class Analyzer
         // independently-plausible sub-candidates, and only one can win. So: also try pairing i
         // with i+2 and i+3, treating whatever's in between as internal pod structure rather than
         // requiring it to be isolated on its own.
-        const int maxSpan = 3;
         var rawCandidates = new List<(int Lo, int Hi, double Start, double End, double AbsentFraction)>();
         for (int i = 0; i < sorted.Count - 1; i++)
         {
