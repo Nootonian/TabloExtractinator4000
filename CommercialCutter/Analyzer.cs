@@ -759,6 +759,26 @@ public static class Analyzer
         return total > 0 ? (double)absent / total : 0.0;
     }
 
+    // Several pipeline steps (bumper validation, boundary nudging, bridging) can each leave
+    // behind a zero/near-zero-duration segment when two boundaries from different steps land on
+    // the same instant — cosmetic only (Cutter already skips near-zero kept segments when
+    // cutting), but it shows up oddly in the review grid otherwise. Rather than patch each step
+    // individually, this runs once at the end of the full pipeline and catches all of them.
+    public static List<Segment> RemoveDegenerateSegments(List<Segment> segments)
+    {
+        var result = new List<Segment>();
+        foreach (var seg in segments)
+        {
+            if (seg.DurationSeconds <= 0.05) continue;
+
+            if (result.Count > 0 && result[^1].IsCommercial == seg.IsCommercial)
+                result[^1] = new Segment(result[^1].StartSeconds, seg.EndSeconds, seg.IsCommercial);
+            else
+                result.Add(seg);
+        }
+        return result;
+    }
+
     private static List<(double Start, double End)> MergeCloseIntervals(
         List<(double Start, double End)> intervals, double toleranceSeconds)
     {

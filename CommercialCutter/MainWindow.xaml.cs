@@ -543,6 +543,7 @@ public partial class MainWindow : Window
                         Log("Trimmed a leading/trailing network promo using black/silence dips.");
                 }
 
+                segments = Analyzer.RemoveDegenerateSegments(segments);
                 ConfigStore.SaveSegments(_segmentsPath, segments);
 
                 Segments.Clear();
@@ -990,6 +991,8 @@ public partial class MainWindow : Window
 
                         if (trimEdgePromos && black is not null && silence is not null)
                             segments = Analyzer.TrimLeadingTrailingPromo(segments, black, silence, maxPromoSeconds, duration);
+
+                        segments = Analyzer.RemoveDegenerateSegments(segments);
 
                         // Batch mode keeps the original filename in place rather than producing a
                         // separate "_clean" copy: cut to a temp file first (ffmpeg is still reading

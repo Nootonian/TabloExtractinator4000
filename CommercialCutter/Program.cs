@@ -176,6 +176,7 @@ public static class Program
             var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
             segments = Analyzer.MergeBlackBridgedBreaks(segments, bridged);
             Console.WriteLine($"Found {black.Count} black dip(s), {silence.Count} silent dip(s).");
+            segments = Analyzer.RemoveDegenerateSegments(segments);
         }
 
         ConfigStore.SaveSegments(segmentsPath, segments);
