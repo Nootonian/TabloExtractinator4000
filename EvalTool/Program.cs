@@ -52,7 +52,7 @@ var minBreakSeconds = minBreakArgIndex >= 0 ? double.Parse(args[minBreakArgIndex
 if (fixedDropArgIndex >= 0)
 {
     drop = double.Parse(args[fixedDropArgIndex + 1], CultureInfo.InvariantCulture);
-    var baseline = Analyzer.ComputeLocalBaseline(scores, interval, 400.0);
+    var baseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
     segments = Analyzer.BuildSegmentsAdaptiveFromBaseline(scores, interval, drop, baseline, adUnitSeconds, minBreakSeconds);
     Console.WriteLine($"Before corroboration: {segments.Count(s => s.IsCommercial)} commercial segment(s)");
     foreach (var s in segments.Where(s => s.IsCommercial))
@@ -70,7 +70,7 @@ else
 
 if (args.Contains("--dump-grid"))
 {
-    var baseline = Analyzer.ComputeLocalBaseline(scores, interval, 400.0);
+    var baseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
     var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, baseline);
     var target = expectedMinutes * 60.0;
     for (int i = 0; i <= 200; i++)
@@ -88,7 +88,7 @@ if (args.Contains("--dump-grid"))
 
 if (args.Contains("--bridge"))
 {
-    var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, 400.0);
+    var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
     var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
     Console.WriteLine($"Black-bridged candidates: {bridged.Count}");
     foreach (var b in bridged)
@@ -116,7 +116,7 @@ if (inspectArgIndex >= 0)
 {
     var rangeStart = double.Parse(args[inspectArgIndex + 1], CultureInfo.InvariantCulture);
     var rangeEnd = double.Parse(args[inspectArgIndex + 2], CultureInfo.InvariantCulture);
-    var baseline = Analyzer.ComputeLocalBaseline(scores, interval, 400.0);
+    var baseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
     Console.WriteLine();
     Console.WriteLine($"--- Inspecting {rangeStart}-{rangeEnd}s ---");
     EvalTool.Inspect.DumpRange(scores, baseline, drop, rangeStart, rangeEnd);

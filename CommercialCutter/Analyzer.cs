@@ -645,7 +645,7 @@ public static class Analyzer
     public static List<(double Start, double End)> FindBlackBridgedBreaks(
         List<(double Start, double End)> blackIntervals,
         List<SampleScore>? scores = null, double[]? baseline = null,
-        double minBreakSeconds = 25.0, double maxBreakSeconds = 250.0, double isolationToleranceSeconds = 20.0,
+        double minBreakSeconds = 25.0, double maxBreakSeconds = 300.0, double isolationToleranceSeconds = 20.0,
         double minAbsentFraction = 0.15, double softDropMargin = 0.05)
     {
         // A real bumper sometimes registers as a tight double-flash (two separate blackdetect
@@ -663,46 +663,83 @@ public static class Analyzer
         // safe now is the similarity check below: a phantom candidate spanning real, confidently-
         // classified program won't show meaningful absence, so it gets rejected on that basis
         // instead of relying on isolation distance alone to catch it.
-        // problem this function exists to avoid. A break landing right at the tail of a long
-        // decoy cluster (e.g. immediately after the titles) is a known remaining gap here — the
-        // logo path with a reasonably low manual dip still catches those.
         var sorted = MergeCloseIntervals(blackIntervals, ChainGapToleranceSeconds);
-        var candidates = new List<(double Start, double End)>();
 
-        // A greedy scan, not every consecutive pair: once dip i+1 is accepted as the *exit*
-        // bumper of a break, it can't also be reused as the *entry* bumper of the next candidate
-        // a couple minutes later — that's exactly how a single bumper at the end of a real break
-        // spawns a phantom second "break" stretching across real program to whatever next
-        // isolated dip happens to fall in range. Skipping past it after a match means each dip
-        // anchors at most one accepted break.
-        int i = 0;
-        while (i < sorted.Count - 1)
+        // A dip can't anchor two accepted breaks (one bumper at the end of a real break can't
+        // also be the start of a phantom second one a couple minutes later), but a single
+        // left-to-right greedy scan picks whichever candidate comes first, not whichever is
+        // actually better supported — and "first" can be a false positive. In one real case
+        // (a busy cold-open/credits cluster merging into one anchor), the resulting bridge over
+        // real program had *more* incidental similarity noise than the genuine break sharing its
+        // boundary, just not enough to be flagged on its own. So: collect every candidate that
+        // independently passes isolation/duration/absence, then resolve conflicts (candidates
+        // that would reuse the same dip) by preferring the one with the strongest absence
+        // evidence, not scan order.
+        // A real pod's own internal transitions between spots are expected and shouldn't need to
+        // be isolated from each other — only the *outer* edges (entering/leaving the whole pod)
+        // need to look like a real bumper. Pairing strictly i with i+1 misses a pod whose own
+        // internal cut happens to register as black too: that splits one real break into two
+        // independently-plausible sub-candidates, and only one can win. So: also try pairing i
+        // with i+2 and i+3, treating whatever's in between as internal pod structure rather than
+        // requiring it to be isolated on its own.
+        const int maxSpan = 3;
+        var rawCandidates = new List<(int Lo, int Hi, double Start, double End, double AbsentFraction)>();
+        for (int i = 0; i < sorted.Count - 1; i++)
         {
             var isolatedBefore = i == 0 || sorted[i].Start - sorted[i - 1].End > isolationToleranceSeconds;
-            var isolatedAfter = i + 1 == sorted.Count - 1 || sorted[i + 2].Start - sorted[i + 1].End > isolationToleranceSeconds;
-            if (!isolatedBefore || !isolatedAfter) { i++; continue; }
+            if (!isolatedBefore) continue;
 
-            var gapStart = sorted[i].End;
-            var gapEnd = sorted[i + 1].Start;
-            var duration = gapEnd - gapStart;
-            if (duration < minBreakSeconds || duration > maxBreakSeconds) { i++; continue; }
-
-            if (scores is not null && baseline is not null && !HasMeaningfulAbsence(scores, baseline, gapStart, gapEnd, softDropMargin, minAbsentFraction))
+            for (int j = i + 1; j <= Math.Min(i + maxSpan, sorted.Count - 1); j++)
             {
-                i++;
-                continue;
-            }
+                var isolatedAfter = j == sorted.Count - 1 || sorted[j + 1].Start - sorted[j].End > isolationToleranceSeconds;
+                if (!isolatedAfter) continue;
 
-            candidates.Add((gapStart, gapEnd));
-            i += 2;
+                var gapStart = sorted[i].End;
+                var gapEnd = sorted[j].Start;
+                var duration = gapEnd - gapStart;
+                if (duration < minBreakSeconds || duration > maxBreakSeconds) continue;
+
+                var absentFraction = scores is not null && baseline is not null
+                    ? ComputeAbsentFraction(scores, baseline, gapStart, gapEnd, softDropMargin)
+                    : 1.0;
+                if (absentFraction < minAbsentFraction) continue;
+
+                rawCandidates.Add((i, j, gapStart, gapEnd, absentFraction));
+            }
         }
+
+        // Conflicts are range overlaps now, not just shared endpoints — a wider candidate spans
+        // every dip between its own endpoints, so it can't coexist with anything that touches one
+        // of those interior dips either.
+        //
+        // Resolution order: absence fraction first, not span width. Span-width-first was tried —
+        // it correctly recovers a pod split by its own internal transition (the wide candidate
+        // spanning both halves wins), but it just as readily recovers a *false* wide candidate
+        // that happens to span both a real short ad and the real program next to it, which is
+        // exactly the cold-open/credits problem this resolution step exists to prevent in the
+        // first place. There's no cheap way to tell "wide because it's one real pod" from "wide
+        // because it accidentally bridges two unrelated things" from the aggregate fraction alone
+        // — so this prefers the safer failure mode (a multi-transition pod's far side sometimes
+        // stays uncaught) over the riskier one (real program getting swallowed).
+        var claimed = new bool[sorted.Count];
+        var candidates = new List<(double Start, double End)>();
+        foreach (var c in rawCandidates.OrderByDescending(c => c.AbsentFraction))
+        {
+            var conflict = false;
+            for (int k = c.Lo; k <= c.Hi && !conflict; k++)
+                if (claimed[k]) conflict = true;
+            if (conflict) continue;
+
+            for (int k = c.Lo; k <= c.Hi; k++) claimed[k] = true;
+            candidates.Add((c.Start, c.End));
+        }
+        candidates = candidates.OrderBy(c => c.Start).ToList();
 
         return candidates;
     }
 
-    private static bool HasMeaningfulAbsence(
-        List<SampleScore> scores, double[] baseline, double rangeStart, double rangeEnd,
-        double softDropMargin, double minAbsentFraction)
+    private static double ComputeAbsentFraction(
+        List<SampleScore> scores, double[] baseline, double rangeStart, double rangeEnd, double softDropMargin)
     {
         int total = 0, absent = 0;
         foreach (var s in scores)
@@ -713,7 +750,7 @@ public static class Analyzer
             total++;
             if (s.Similarity < baseline[idx] - softDropMargin) absent++;
         }
-        return total > 0 && (double)absent / total >= minAbsentFraction;
+        return total > 0 ? (double)absent / total : 0.0;
     }
 
     private static List<(double Start, double End)> MergeCloseIntervals(
