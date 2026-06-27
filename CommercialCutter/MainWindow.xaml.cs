@@ -201,6 +201,14 @@ public partial class MainWindow : Window
         OutputPathBox.Text = Path.Combine(Path.GetDirectoryName(_videoPath)!,
             Path.GetFileNameWithoutExtension(_videoPath) + "_clean.mp4");
 
+        // Duration probing is awaited below and can take a few seconds on a network drive.
+        // SampleAtBox isn't otherwise gated, so without this, typing into it while still
+        // probing the *new* video gets silently overwritten the instant the probe resolves and
+        // populates it with the saved/default value — looking exactly like the field "doesn't
+        // persist what you type" even though the persistence itself is fine.
+        SampleAtBox.IsEnabled = false;
+        SelectBoxButton.IsEnabled = false;
+
         try
         {
             _durationSeconds = await Ffmpeg.GetDurationSecondsAsync(_videoPath);
@@ -226,6 +234,7 @@ public partial class MainWindow : Window
                 BoxInfoText.Text = "";
             }
             SampleAtBox.Text = (savedSampleAt ?? _durationSeconds * 0.25).ToString("F0", CultureInfo.InvariantCulture);
+            SampleAtBox.IsEnabled = true;
             SelectBoxButton.IsEnabled = true;
             // A box drawn in an earlier session means analysis can run immediately — no need to
             // redraw it just because the app was restarted or a different video was opened first.
@@ -241,6 +250,7 @@ public partial class MainWindow : Window
         {
             VideoInfoText.Text = "Could not read duration.";
             Log($"ffprobe failed: {ex.Message}");
+            SampleAtBox.IsEnabled = true;
         }
     }
 
