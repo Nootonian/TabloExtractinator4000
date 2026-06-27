@@ -18,6 +18,7 @@ public class AppSettings
     public double? ManualDip { get; set; }
     public bool TrimEdgePromos { get; set; } = false;
     public double MaxPromoSeconds { get; set; } = 90.0;
+    public bool FavorKeepingProgram { get; set; } = false;
     public string? LastVideoFolder { get; set; }
     public string? LastBatchFolder { get; set; }
 }

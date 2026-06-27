@@ -73,6 +73,7 @@ public partial class MainWindow : Window
         if (s.ManualDip is { } manualDipSetting) AdaptiveDipBox.Text = manualDipSetting.ToString(CultureInfo.InvariantCulture);
         TrimEdgePromosCheckBox.IsChecked = s.TrimEdgePromos;
         MaxPromoSecondsBox.Text = s.MaxPromoSeconds.ToString(CultureInfo.InvariantCulture);
+        FavorKeepingProgramCheckBox.IsChecked = s.FavorKeepingProgram;
 
         if (s.DetectionMode == "Absolute") AbsoluteModeRadio.IsChecked = true;
         else AdaptiveModeRadio.IsChecked = true;
@@ -108,6 +109,7 @@ public partial class MainWindow : Window
         _settings.TrimEdgePromos        = TrimEdgePromosCheckBox.IsChecked == true;
         if (double.TryParse(MaxPromoSecondsBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var maxPromo) && maxPromo > 0)
             _settings.MaxPromoSeconds = maxPromo;
+        _settings.FavorKeepingProgram   = FavorKeepingProgramCheckBox.IsChecked == true;
 
         if (!string.IsNullOrEmpty(_videoPath))
             _settings.LastVideoFolder = Path.GetDirectoryName(_videoPath);
@@ -429,6 +431,7 @@ public partial class MainWindow : Window
             Log("Enter a valid max nudge (seconds) for transition refinement.");
             return;
         }
+        var favorKeepingProgram = FavorKeepingProgramCheckBox.IsChecked == true;
         var trimEdgePromos = TrimEdgePromosCheckBox.IsChecked == true;
         var maxPromoSeconds = 90.0;
         if (trimEdgePromos &&
@@ -527,7 +530,9 @@ public partial class MainWindow : Window
                     // scores/baseline guard against trusting black timing alone — see
                     // FindBlackBridgedBreaks for why that matters.
                     var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
-                    var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
+                    var bridged = favorKeepingProgram
+                        ? Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline, minAbsentFraction: Analyzer.FavorProgramAbsentFraction)
+                        : Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
                     var beforeBridgeCount = segments.Count(s => s.IsCommercial);
                     segments = Analyzer.MergeBlackBridgedBreaks(segments, bridged);
                     var addedCount = segments.Count(s => s.IsCommercial) - beforeBridgeCount;
@@ -911,6 +916,7 @@ public partial class MainWindow : Window
             Log("Enter a valid max nudge (seconds) for transition refinement.");
             return;
         }
+        var favorKeepingProgram = FavorKeepingProgramCheckBox.IsChecked == true;
         var trimEdgePromos = TrimEdgePromosCheckBox.IsChecked == true;
         var maxPromoSeconds = 90.0;
         if (trimEdgePromos &&
@@ -986,7 +992,9 @@ public partial class MainWindow : Window
                         if (refineTransitions && black is not null)
                         {
                             var bridgeBaseline = Analyzer.ComputeLocalBaseline(scores, interval, Analyzer.LocalWindowSeconds);
-                            var bridged = Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
+                            var bridged = favorKeepingProgram
+                        ? Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline, minAbsentFraction: Analyzer.FavorProgramAbsentFraction)
+                        : Analyzer.FindBlackBridgedBreaks(black, scores, bridgeBaseline);
                             segments = Analyzer.MergeBlackBridgedBreaks(segments, bridged);
                         }
 

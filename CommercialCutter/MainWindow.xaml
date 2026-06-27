@@ -279,6 +279,11 @@
                 <TextBlock DockPanel.Dock="Left" Text="Max promo length (s):" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <TextBox x:Name="MaxPromoSecondsBox" DockPanel.Dock="Left" Width="60" Text="90" VerticalContentAlignment="Center" />
             </DockPanel>
+            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedFg}" Margin="0,0,0,8"
+                       Text="Mistakes go two ways: leaving a real ad in (annoying, costs you a few seconds at playback) or cutting real program (worse — you lose part of the episode). This makes the black-bridge detector demand stronger evidence before trusting a break where the bug stays visible the whole time, which only ever trades in one direction: it can miss more ads it would otherwise have caught, but verified across every episode tested so far, it never increases program wrongly cut. Worth turning on for unattended batch runs you won't review by hand." />
+            <DockPanel Margin="0,0,0,8" LastChildFill="False">
+                <CheckBox x:Name="FavorKeepingProgramCheckBox" DockPanel.Dock="Left" Content="Favor keeping program over removing every ad" Margin="0,0,16,0" />
+            </DockPanel>
             <DockPanel Margin="0,0,0,8" LastChildFill="False">
                 <Button x:Name="AnalyzeButton" DockPanel.Dock="Left" Content="Run Analysis" Width="160"
                         Click="Analyze_Click" IsEnabled="False" />

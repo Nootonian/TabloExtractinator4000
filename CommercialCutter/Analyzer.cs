@@ -33,6 +33,15 @@ public static class Analyzer
     // There's no longer a good reason to deviate from this value.
     public const double LocalWindowSeconds = 300.0;
 
+    // FindBlackBridgedBreaks' default absence-fraction floor (0.40) already only trusts a
+    // black-bridged candidate when the logo signal backs it up — but a user who'd rather miss an
+    // extra ad than ever risk a real scene getting cut (e.g. for an unattended batch run nobody's
+    // going to review by hand) can ask for stronger evidence still. Swept 0.40 up through 0.95
+    // against every tested episode: "cut real program" (the bad direction) never increased once,
+    // only "kept junk" (a missed ad) did — confirmed monotonic and safe in this one direction.
+    // 0.70 sits comfortably past where most episodes plateau without being needlessly extreme.
+    public const double FavorProgramAbsentFraction = 0.70;
+
     // Scores every thumbnail's similarity to the reference logo crop. Classification
     // (what threshold counts as "logo present") happens separately in BuildSegments,
     // so the same scores can be re-classified at different thresholds without re-reading images.
