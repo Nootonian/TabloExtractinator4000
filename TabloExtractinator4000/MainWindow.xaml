@@ -948,15 +948,15 @@
                                 CornerRadius="3" Padding="8,5" Margin="0,0,0,8">
                             <DockPanel>
                                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                                    <TextBlock Text="Elapsed:" FontSize="11" Foreground="#888888" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding TotalElapsedText}" FontSize="11" FontWeight="SemiBold"
-                                               Foreground="#D4D4D4" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
                                     <TextBlock Text="Remaining:" FontSize="11" Foreground="#888888" VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding TotalRemainingText}" FontSize="11" FontWeight="SemiBold"
                                                Foreground="#4FC3F7" Margin="4,0,0,0" VerticalAlignment="Center"
                                                ToolTip="Rough guess — based on current progress and the recordings' own runtime."/>
+                                </StackPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <TextBlock Text="Elapsed:" FontSize="11" Foreground="#888888" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding TotalElapsedText}" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="#D4D4D4" Margin="4,0,0,0" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </DockPanel>
                         </Border>

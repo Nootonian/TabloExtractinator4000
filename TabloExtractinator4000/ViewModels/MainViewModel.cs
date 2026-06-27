@@ -147,7 +147,7 @@ public partial class MainViewModel : ObservableObject
         else if (warn != null)
             FfmpegWarning = warn;
 
-        _summaryTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _summaryTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _summaryTimer.Tick += (_, _) => RecomputeExtractionSummary();
     }
 
@@ -546,9 +546,12 @@ public partial class MainViewModel : ObservableObject
     }
 
     // Remaining time is a rough guess: jobs already downloading use their own
-    // pace-based estimate; anything not yet that far along falls back to the
-    // recording's own runtime as a stand-in. The total is then divided by the
-    // parallelism setting to roughly account for jobs running side by side.
+    // pace-based estimate; anything not yet that far along is projected using
+    // the download speed-up ratio observed from other jobs in this run (since
+    // a copy-remux typically downloads many times faster than real-time, the
+    // recording's own runtime alone is a poor stand-in). The total is then
+    // divided by the parallelism setting to roughly account for jobs running
+    // side by side.
     private void RecomputeExtractionSummary()
     {
         if (_extractionRunStartedAt == null)
@@ -573,20 +576,51 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        var totalGuessSeconds = outstanding.Sum(EstimateJobRemainingSeconds);
+        var speedupRatio    = GetObservedSpeedupRatio();
+        var totalGuessSeconds = outstanding.Sum(j => EstimateJobRemainingSeconds(j, speedupRatio));
         var remaining = totalGuessSeconds / Math.Max(1, MaxParallelDownloads);
         TotalRemainingText = $"~{FormatDurationPlain(remaining)}";
     }
 
-    private static double EstimateJobRemainingSeconds(ExportJob job)
+    // Average "content-seconds downloaded per wall-clock second" across any job
+    // in this run with real data to draw from. Falls back to 1:1 (real-time) if
+    // nothing has progressed far enough yet to measure.
+    private double GetObservedSpeedupRatio()
+    {
+        var ratios = new List<double>();
+        foreach (var vm in ExportJobs)
+        {
+            var job = vm.Job;
+            double elapsed, contentSeconds;
+
+            if (job.State == ExportState.Downloading && job.ProgressPct > 1.0)
+            {
+                elapsed        = (DateTime.UtcNow - job.DownloadStartedAt).TotalSeconds;
+                contentSeconds = job.Recording.DurationSeconds * (job.ProgressPct / 100.0);
+            }
+            else if (job.State is ExportState.Verifying or ExportState.Verified or ExportState.DeletedFromTablo
+                     && job.OutputDurationSeconds > 0)
+            {
+                // Includes the brief verify step too — a small overestimate of wall time, close enough.
+                elapsed        = (DateTime.UtcNow - job.DownloadStartedAt).TotalSeconds;
+                contentSeconds = job.OutputDurationSeconds;
+            }
+            else continue;
+
+            if (elapsed > 1) ratios.Add(contentSeconds / elapsed);
+        }
+        return ratios.Count > 0 ? ratios.Average() : 1.0;
+    }
+
+    private static double EstimateJobRemainingSeconds(ExportJob job, double speedupRatio)
     {
         if (job.State == ExportState.Downloading && job.ProgressPct > 1.0)
         {
             var elapsed = (DateTime.UtcNow - job.DownloadStartedAt).TotalSeconds;
             return Math.Max(0, elapsed / (job.ProgressPct / 100.0) - elapsed);
         }
-        // No usable progress yet — guess using the recording's own runtime.
-        return job.Recording.DurationSeconds;
+        // No usable progress yet — project using the observed download pace.
+        return job.Recording.DurationSeconds / Math.Max(0.01, speedupRatio);
     }
 
     private static string FormatDurationPlain(double seconds)

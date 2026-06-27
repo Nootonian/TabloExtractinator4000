@@ -37,14 +37,18 @@ public partial class ExportProgressViewModel : ObservableObject
     }
 
     // The button is always present, but its action changes with state:
-    // Queued/terminal → dismiss the tile directly (nothing submitted/active to cancel)
-    // Pending         → pull it out of the orchestrator's queue
-    // active          → abort the in-progress job
-    public bool   RemovesDirectly  => State is "Queued" or "Cancelled" or "Failed" or "Verified" or "DeletedFromTablo";
+    // Queued/Pending/terminal → dismiss the tile directly. A Pending job is still
+    //   sitting unread in the orchestrator's channel — nothing is watching its
+    //   token until a worker frees up, so waiting for that report would leave
+    //   the tile stuck. Cancelling the token AND removing the tile immediately
+    //   means if a worker does dequeue it moments later, it'll see the
+    //   cancellation and skip it quietly with no tile left to confuse.
+    // active (Discovering/Downloading/Verifying) → abort and wait for the
+    //   orchestrator to report back before the tile can be dismissed.
+    public bool   RemovesDirectly  => State is not ("Discovering" or "Downloading" or "Verifying");
     public string CancelButtonLabel => State switch
     {
-        "Queued"  => "✕ Remove",
-        "Pending" => "✕ Cancel",
+        "Queued" or "Pending" => "✕ Cancel",
         "Discovering" or "Downloading" or "Verifying" => "⬛ Abort",
         _ => "✕ Remove"
     };
@@ -61,7 +65,7 @@ public partial class ExportProgressViewModel : ObservableObject
     [RelayCommand]
     private void Cancel()
     {
+        Job.Cts.Cancel();   // harmless no-op if never submitted or already finished
         if (RemovesDirectly) RemoveRequested?.Invoke(this);
-        else                 Job.Cts.Cancel();
     }
 }
