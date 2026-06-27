@@ -48,6 +48,14 @@ public partial class MainViewModel : ObservableObject
     partial void OnFfmpegExtraArgsChanged(string value)      => _ffmpeg.ExtraArgs                  = value;
     partial void OnMaxParallelDownloadsChanged(int value)    => _orchestrator.MaxParallelDownloads  = value;
 
+    // Total elapsed/remaining summary across the whole queue — remaining is a
+    // rough guess (see RecomputeExtractionSummary), not a precise estimate.
+    [ObservableProperty] private string _totalElapsedText   = "—";
+    [ObservableProperty] private string _totalRemainingText = "—";
+
+    private DateTime? _extractionRunStartedAt;
+    private readonly System.Windows.Threading.DispatcherTimer _summaryTimer;
+
     // Export progress list
     public ObservableCollection<ExportProgressViewModel> ExportJobs { get; } = [];
 
@@ -138,6 +146,9 @@ public partial class MainViewModel : ObservableObject
             FfmpegWarning = warn;
         else if (warn != null)
             FfmpegWarning = warn;
+
+        _summaryTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _summaryTimer.Tick += (_, _) => RecomputeExtractionSummary();
     }
 
     // ---------------------------------------------------------------------------
@@ -317,6 +328,11 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanExport))]
     private void ExportSelected()
     {
+        if (!_autoExtracting)
+        {
+            _extractionRunStartedAt = DateTime.UtcNow;
+            _summaryTimer.Start();
+        }
         _autoExtracting = true;
         SubmitQueuedJobs();
     }
@@ -419,8 +435,20 @@ public partial class MainViewModel : ObservableObject
     }
 
     // A tile with nothing left to cancel (Queued or terminal) — the user clicked
-    // its button just to dismiss it from the list.
-    private void OnTileRemoveRequested(ExportProgressViewModel vm) => RemoveTile(vm);
+    // its button just to dismiss it from the list. If they checked "delete after
+    // extraction" only after the job already finished, this is the last chance
+    // to honor it before the tile disappears for good.
+    private async void OnTileRemoveRequested(ExportProgressViewModel vm)
+    {
+        var job = vm.Job;
+        if (job.State == ExportState.Verified && job.DeleteAfterExtraction)
+        {
+            vm.Status = "Deleting from Tablo…";
+            var deleted = await _orchestrator.TryDeleteAsync(job, ExportProgress);
+            if (!deleted) return;   // leave the tile so the failure (or skip reason) is visible
+        }
+        RemoveTile(vm);
+    }
 
     private void OnExportProgress((ExportJob job, string msg) update)
     {
@@ -490,6 +518,8 @@ public partial class MainViewModel : ObservableObject
     {
         IsBusy = ExportJobs.Any(vm => vm.Job.State is ExportState.Pending or ExportState.Discovering
                                                     or ExportState.Downloading or ExportState.Verifying);
+        RecomputeExtractionSummary();
+
         if (IsBusy) { StatusMessage = "Extracting…"; return; }
 
         // Nothing currently active — if the user started extraction and more got
@@ -499,6 +529,8 @@ public partial class MainViewModel : ObservableObject
         {
             if (ExportJobs.Any(vm => vm.Job.State == ExportState.Queued)) { SubmitQueuedJobs(); return; }
             _autoExtracting = false;
+            _summaryTimer.Stop();
+            RecomputeExtractionSummary();   // one last refresh so it freezes at the final values
         }
 
         var queuedCount = ExportJobs.Count(vm => vm.Job.State == ExportState.Queued);
@@ -511,6 +543,57 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = ExportJobs.Any(vm => vm.Job.State == ExportState.Failed)
             ? "Extraction complete — some failed, see tiles."
             : ExportJobs.Count > 0 ? "Extraction complete." : "Ready";
+    }
+
+    // Remaining time is a rough guess: jobs already downloading use their own
+    // pace-based estimate; anything not yet that far along falls back to the
+    // recording's own runtime as a stand-in. The total is then divided by the
+    // parallelism setting to roughly account for jobs running side by side.
+    private void RecomputeExtractionSummary()
+    {
+        if (_extractionRunStartedAt == null)
+        {
+            TotalElapsedText   = "—";
+            TotalRemainingText = "—";
+            return;
+        }
+
+        var elapsed = (DateTime.UtcNow - _extractionRunStartedAt.Value).TotalSeconds;
+        TotalElapsedText = FormatDurationPlain(elapsed);
+
+        var outstanding = ExportJobs
+            .Where(vm => vm.Job.State is ExportState.Queued or ExportState.Pending or ExportState.Discovering
+                                       or ExportState.Downloading or ExportState.Verifying)
+            .Select(vm => vm.Job)
+            .ToList();
+
+        if (outstanding.Count == 0)
+        {
+            TotalRemainingText = "0s";
+            return;
+        }
+
+        var totalGuessSeconds = outstanding.Sum(EstimateJobRemainingSeconds);
+        var remaining = totalGuessSeconds / Math.Max(1, MaxParallelDownloads);
+        TotalRemainingText = $"~{FormatDurationPlain(remaining)}";
+    }
+
+    private static double EstimateJobRemainingSeconds(ExportJob job)
+    {
+        if (job.State == ExportState.Downloading && job.ProgressPct > 1.0)
+        {
+            var elapsed = (DateTime.UtcNow - job.DownloadStartedAt).TotalSeconds;
+            return Math.Max(0, elapsed / (job.ProgressPct / 100.0) - elapsed);
+        }
+        // No usable progress yet — guess using the recording's own runtime.
+        return job.Recording.DurationSeconds;
+    }
+
+    private static string FormatDurationPlain(double seconds)
+    {
+        if (seconds >= 3600) return $"{(int)(seconds / 3600)}h {(int)(seconds % 3600 / 60)}m";
+        if (seconds >= 60)   return $"{(int)(seconds / 60)}m {(int)(seconds % 60)}s";
+        return $"{(int)seconds}s";
     }
 
     [RelayCommand]

@@ -142,28 +142,9 @@ public class ExportOrchestrator
 
             Report(ExportState.Verified, $"Verified ({actualSec}s, {job.OutputBytes / 1_048_576:N0} MB)");
 
-            // ---- Step 4: Delete from Tablo (triple-gated) ----
             // Read live — the user can toggle this per-job up until this point.
-            if (!job.DeleteAfterExtraction) return;
-
-            if (!job.FfmpegSuccess || !job.ProbeVerified)
-            {
-                await _audit.LogDeleteAttemptAsync(rec, job, deleteSucceeded: false,
-                    "Delete skipped: ffmpeg or probe gate not passed.");
-                return;
-            }
-
-            try
-            {
-                await _api.DeleteRecordingAsync(rec, ct);
-                Report(ExportState.DeletedFromTablo, "Deleted from Tablo.");
-                await _audit.LogDeleteAttemptAsync(rec, job, deleteSucceeded: true);
-            }
-            catch (Exception ex)
-            {
-                await _audit.LogDeleteAttemptAsync(rec, job, deleteSucceeded: false, ex.Message);
-                Report(ExportState.Verified, $"Verified but delete failed: {ex.Message}");
-            }
+            if (job.DeleteAfterExtraction)
+                await TryDeleteAsync(job, statusUpdate, ct);
         }
         catch (OperationCanceledException)
         {
@@ -173,6 +154,37 @@ public class ExportOrchestrator
         {
             job.ErrorMessage = ex.Message;
             Report(ExportState.Failed, $"Error: {ex.Message}");
+        }
+    }
+
+    // Deletes the recording from Tablo, gated on a successful extraction
+    // (FfmpegSuccess + ProbeVerified). Used both right after verification and
+    // later if the user checks "delete after extraction" on an already-finished
+    // tile and then dismisses it — the gate still applies either way.
+    public async Task<bool> TryDeleteAsync(
+        ExportJob job, IProgress<(ExportJob, string)>? statusUpdate, CancellationToken ct = default)
+    {
+        void Report(ExportState state, string msg) { job.State = state; statusUpdate?.Report((job, msg)); }
+
+        if (!job.FfmpegSuccess || !job.ProbeVerified)
+        {
+            await _audit.LogDeleteAttemptAsync(job.Recording, job, deleteSucceeded: false,
+                "Delete skipped: ffmpeg or probe gate not passed.");
+            return false;
+        }
+
+        try
+        {
+            await _api.DeleteRecordingAsync(job.Recording, ct);
+            Report(ExportState.DeletedFromTablo, "Deleted from Tablo.");
+            await _audit.LogDeleteAttemptAsync(job.Recording, job, deleteSucceeded: true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            await _audit.LogDeleteAttemptAsync(job.Recording, job, deleteSucceeded: false, ex.Message);
+            Report(ExportState.Verified, $"Verified but delete failed: {ex.Message}");
+            return false;
         }
     }
 
